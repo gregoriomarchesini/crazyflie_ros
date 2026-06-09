@@ -1,0 +1,284 @@
+/**:
+  ros__parameters:
+    DIM: 2
+    MANAGER_TIMER: 0.8
+    AGENT_TIMER: 0.05
+    SPEED: 0.4
+    BOX_WEIGHT: 10
+    COMM_DISTANCE: 3.
+    HOOVERING_HEIGHT: 1.
+
+    agent_0:
+      pos: [2.0, 0.0, 0.3]
+      radio: 1
+      channel: 80
+    agent_1:
+      pos: [1.618033988749895, 1.1755705045849463, 0.3]
+      radio: 1
+      channel: 80
+    agent_2:
+      pos: [0.6180339887498949, 1.902113032590307, 0.3]
+      radio: 1
+      channel: 80
+    agent_3:
+      pos: [-0.6180339887498947, 1.9021130325903073, 0.3]
+      radio: 1
+      channel: 80
+    agent_4:
+      pos: [-1.6180339887498947, 1.1755705045849465, 0.3]
+      radio: 1
+      channel: 80
+    agent_5:
+      pos: [-2.0, 2.4492935982947064e-16, 0.3]
+      radio: 1
+      channel: 80
+    agent_6:
+      pos: [-1.6180339887498951, -1.175570504584946, 0.3]
+      radio: 1
+      channel: 80
+    agent_7:
+      pos: [-0.6180339887498951, -1.902113032590307, 0.3]
+      radio: 1
+      channel: 80
+    agent_8:
+      pos: [0.6180339887498945, -1.9021130325903073, 0.3]
+      radio: 1
+      channel: 80
+    agent_9:
+      pos: [1.6180339887498947, -1.1755705045849467, 0.3]
+      radio: 1
+      channel: 80
+
+    PERIODS:
+      period_0: [20, 25]
+      period_1: [45, 50]
+      period_2: [70, 75]
+      period_3: [95, 100]
+      period_4: [120, 125]
+
+    TASKS:
+      task_1:
+        period_num: 0
+        edges: [0, 1]
+        rel_position: [3.1444395585093243, 0.8023625245167985]
+        size: 0.2
+      task_2:
+        period_num: 0
+        edges: [0, 2]
+        rel_position: [-0.6276039657865453, 0.9432784556890662]
+        size: 0.2
+      task_3:
+        period_num: 0
+        edges: [0, 3]
+        rel_position: [2.824633980085904, 2.808405475377076]
+        size: 0.2
+      task_4:
+        period_num: 0
+        edges: [0, 4]
+        rel_position: [0.8229001743251723, 3.4804712881505884]
+        size: 0.2
+      task_5:
+        period_num: 0
+        edges: [0, 5]
+        rel_position: [3.28274356074363, 1.5731231460757071]
+        size: 0.2
+      task_6:
+        period_num: 0
+        edges: [0, 6]
+        rel_position: [3.1930516120151604, 0.940699922497995]
+        size: 0.2
+      task_7:
+        period_num: 0
+        edges: [0, 7]
+        rel_position: [-0.7077529132185256, 1.7249601445314864]
+        size: 0.2
+      task_8:
+        period_num: 0
+        edges: [0, 8]
+        rel_position: [2.4473529078020473, -0.09207051655829268]
+        size: 0.2
+      task_9:
+        period_num: 0
+        edges: [0, 9]
+        rel_position: [-0.09416873779849544, 0.08394758961907867]
+        size: 0.2
+      task_11:
+        period_num: 1
+        edges: [0, 1]
+        rel_position: [0.5748324966639414, 0.2173590446405569]
+        size: 0.2
+      task_12:
+        period_num: 1
+        edges: [0, 2]
+        rel_position: [-2.159683693629629, 0.9855748882404591]
+        size: 0.2
+      task_13:
+        period_num: 1
+        edges: [0, 3]
+        rel_position: [1.5196530406036857, 1.4371676364339891]
+        size: 0.2
+      task_14:
+        period_num: 1
+        edges: [0, 4]
+        rel_position: [-2.3979890544638853, 2.189758039021878]
+        size: 0.2
+      task_15:
+        period_num: 1
+        edges: [0, 5]
+        rel_position: [1.5151558353097596, 2.4936493857816426]
+        size: 0.2
+      task_16:
+        period_num: 1
+        edges: [0, 6]
+        rel_position: [-0.5457295214655017, 3.9526916632473075]
+        size: 0.2
+      task_17:
+        period_num: 1
+        edges: [0, 7]
+        rel_position: [-0.07247331420652858, 3.9282434786376763]
+        size: 0.2
+      task_18:
+        period_num: 1
+        edges: [0, 8]
+        rel_position: [-1.1688223857819233, 3.8082910649278494]
+        size: 0.2
+      task_19:
+        period_num: 1
+        edges: [0, 9]
+        rel_position: [1.3603966638443983, 2.884657918350659]
+        size: 0.2
+      task_21:
+        period_num: 2
+        edges: [0, 1]
+        rel_position: [-2.5534632397539747, -0.5975826081789941]
+        size: 0.2
+      task_22:
+        period_num: 2
+        edges: [0, 2]
+        rel_position: [-0.5915586728385009, -0.5431297679575644]
+        size: 0.2
+      task_23:
+        period_num: 2
+        edges: [0, 3]
+        rel_position: [0.3226685543514738, 1.6435728265949319]
+        size: 0.2
+      task_24:
+        period_num: 2
+        edges: [0, 4]
+        rel_position: [-3.141973915632283, -0.12687412029996326]
+        size: 0.2
+      task_25:
+        period_num: 2
+        edges: [0, 5]
+        rel_position: [-0.6332859726224858, -0.5674956379591303]
+        size: 0.2
+      task_26:
+        period_num: 2
+        edges: [0, 6]
+        rel_position: [0.20978005991699233, 1.977121682412346]
+        size: 0.2
+      task_27:
+        period_num: 2
+        edges: [0, 7]
+        rel_position: [-2.4990894450104517, -0.6251929744964113]
+        size: 0.2
+      task_28:
+        period_num: 2
+        edges: [0, 8]
+        rel_position: [0.3681076746645393, 1.3814395388619185]
+        size: 0.2
+      task_29:
+        period_num: 2
+        edges: [0, 9]
+        rel_position: [-2.839095985027662, 2.7578295542548146]
+        size: 0.2
+      task_31:
+        period_num: 3
+        edges: [0, 1]
+        rel_position: [-1.9427603575890129, 2.1720733291064973]
+        size: 0.2
+      task_32:
+        period_num: 3
+        edges: [0, 2]
+        rel_position: [-0.07845056379861554, 0.0034950012025856125]
+        size: 0.2
+      task_33:
+        period_num: 3
+        edges: [0, 3]
+        rel_position: [0.8778121112237169, 0.17884603087498596]
+        size: 0.2
+      task_34:
+        period_num: 3
+        edges: [0, 4]
+        rel_position: [0.1604685830185175, 3.996314746949273]
+        size: 0.2
+      task_35:
+        period_num: 3
+        edges: [0, 5]
+        rel_position: [-0.8858239390790412, 3.7670525494837923]
+        size: 0.2
+      task_36:
+        period_num: 3
+        edges: [0, 6]
+        rel_position: [-1.559366122095456, 0.8116597422449345]
+        size: 0.2
+      task_37:
+        period_num: 3
+        edges: [0, 7]
+        rel_position: [-1.2761259176543898, 0.5020496789931568]
+        size: 0.2
+      task_38:
+        period_num: 3
+        edges: [0, 8]
+        rel_position: [-0.1833466142027297, 0.01301293994121977]
+        size: 0.2
+      task_39:
+        period_num: 3
+        edges: [0, 9]
+        rel_position: [-1.0300187944466688, 3.6828461599862408]
+        size: 0.2
+      task_41:
+        period_num: 4
+        edges: [0, 1]
+        rel_position: [1.9508071018162245, 3.488480555827744]
+        size: 0.2
+      task_42:
+        period_num: 4
+        edges: [0, 2]
+        rel_position: [0.2958528475899318, 3.5604818548489074]
+        size: 0.2
+      task_43:
+        period_num: 4
+        edges: [0, 3]
+        rel_position: [2.640419888087271, 2.9107950915926653]
+        size: 0.2
+      task_44:
+        period_num: 4
+        edges: [0, 4]
+        rel_position: [-0.9325849494491285, 1.4019480514869198]
+        size: 0.2
+      task_45:
+        period_num: 4
+        edges: [0, 5]
+        rel_position: [2.276603426427647, 3.2809459870944853]
+        size: 0.2
+      task_46:
+        period_num: 4
+        edges: [0, 6]
+        rel_position: [3.007263579035955, 2.088384880743056]
+        size: 0.2
+      task_47:
+        period_num: 4
+        edges: [0, 7]
+        rel_position: [2.040531731122015, 3.4399319137393425]
+        size: 0.2
+      task_48:
+        period_num: 4
+        edges: [0, 8]
+        rel_position: [0.5920102792229337, 3.6539757457422137]
+        size: 0.2
+      task_49:
+        period_num: 4
+        edges: [0, 9]
+        rel_position: [0.9331465307330736, 3.7026802771187057]
+        size: 0.2

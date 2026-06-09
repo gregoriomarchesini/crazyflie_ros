@@ -1,0 +1,28 @@
+/**:
+  ros__parameters:
+    DIM: 2
+    MANAGER_TIMER: 0.8
+    AGENT_TIMER: 0.05
+    SPEED: 0.4
+    BOX_WEIGHT: 10
+    COMM_DISTANCE: 3.
+    HOOVERING_HEIGHT: 1.
+
+    agent_2:
+      pos: [1.0, 1.0, 0.3]
+      radio: 1
+      channel: 80
+    agent_6:
+      pos: [-1.0, -1.0, 0.3]
+      radio: 1
+      channel: 80
+
+    PERIODS:
+      period_0: [20, 25]
+
+    TASKS:
+      task_1:
+        period_num: 0
+        edges: [2, 6]
+        rel_position: [2, -2]
+        size: 0.2

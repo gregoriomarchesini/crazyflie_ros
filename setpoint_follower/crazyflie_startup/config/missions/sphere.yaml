@@ -1,0 +1,146 @@
+/**:
+  ros__parameters:
+    DIM: 3
+    MANAGER_TIMER: 0.8
+    AGENT_TIMER: 0.05
+    SPEED: 0.4
+    BOX_WEIGHT: 10
+    COMM_DISTANCE: 3.
+    HOOVERING_HEIGHT: 1.
+
+    agent_0:
+      pos: [2.0, 0.0, 0.3]
+      radio: 1
+      channel: 80
+    agent_1:
+      pos: [1.618033988749895, 1.1755705045849463, 0.3]
+      radio: 1
+      channel: 80
+    agent_2:
+      pos: [0.6180339887498949, 1.902113032590307, 0.3]
+      radio: 1
+      channel: 80
+    agent_3:
+      pos: [-0.6180339887498947, 1.9021130325903073, 0.3]
+      radio: 1
+      channel: 80
+    agent_4:
+      pos: [-1.6180339887498947, 1.1755705045849465, 0.3]
+      radio: 1
+      channel: 80
+    agent_5:
+      pos: [-2.0, 2.4492935982947064e-16, 0.3]
+      radio: 1
+      channel: 80
+    agent_6:
+      pos: [-1.6180339887498951, -1.175570504584946, 0.3]
+      radio: 1
+      channel: 80
+    agent_7:
+      pos: [-0.6180339887498951, -1.902113032590307, 0.3]
+      radio: 1
+      channel: 80
+    agent_8:
+      pos: [0.6180339887498945, -1.9021130325903073, 0.3]
+      radio: 1
+      channel: 80
+    agent_9:
+      pos: [1.6180339887498947, -1.1755705045849467, 0.3]
+      radio: 1
+      channel: 80
+
+    PERIODS:
+      period_0: [20, 25]
+      period_1: [45, 50]
+
+    TASKS:
+      task_1:
+        period_num: 0
+        edges: [0, 1]
+        rel_position: [0.8848426536939842, 0.8105883531138276, 0.3999999999999999]
+        size: 0.2
+      task_2:
+        period_num: 0
+        edges: [0, 2]
+        rel_position: [-0.13988115954713878, -1.5938736653837242, 0.8]
+        size: 0.2
+      task_3:
+        period_num: 0
+        edges: [0, 3]
+        rel_position: [-1.1152868544753383, 1.4546942057472096, 1.1999999999999997]
+        size: 0.2
+      task_4:
+        period_num: 0
+        edges: [0, 4]
+        rel_position: [1.9296364654883318, -0.3413255206656811, 1.6]
+        size: 0.2
+      task_5:
+        period_num: 0
+        edges: [0, 5]
+        rel_position: [-1.6875105896247933, -1.0734561052526472, 2.0]
+        size: 0.2
+      task_6:
+        period_num: 0
+        edges: [0, 6]
+        rel_position: [0.5087184656308479, 1.8924073353076487, 2.4]
+        size: 0.2
+      task_7:
+        period_num: 0
+        edges: [0, 7]
+        rel_position: [0.8448565316343529, -1.6267198409544192, 2.8]
+        size: 0.2
+      task_8:
+        period_num: 0
+        edges: [0, 8]
+        rel_position: [-1.5029140741185842, 0.5488618093985744, 3.2]
+        size: 0.2
+      task_9:
+        period_num: 0
+        edges: [0, 9]
+        rel_position: [1.1092146673653644, 0.4578676901699265, 3.5999999999999996]
+        size: 0.2
+      task_11:
+        period_num: 1
+        edges: [0, 1]
+        rel_position: [-0.8848426536939842, -0.8105883531138276, -0.40000000000000036]
+        size: 0.2
+      task_12:
+        period_num: 1
+        edges: [0, 2]
+        rel_position: [0.13988115954713878, 1.5938736653837242, -0.7999999999999998]
+        size: 0.2
+      task_13:
+        period_num: 1
+        edges: [0, 3]
+        rel_position: [1.1152868544753383, -1.4546942057472096, -1.1999999999999997]
+        size: 0.2
+      task_14:
+        period_num: 1
+        edges: [0, 4]
+        rel_position: [-1.9296364654883318, 0.3413255206656811, -1.6]
+        size: 0.2
+      task_15:
+        period_num: 1
+        edges: [0, 5]
+        rel_position: [1.6875105896247933, 1.0734561052526472, -2.0]
+        size: 0.2
+      task_16:
+        period_num: 1
+        edges: [0, 6]
+        rel_position: [-0.5087184656308479, -1.8924073353076487, -2.4]
+        size: 0.2
+      task_17:
+        period_num: 1
+        edges: [0, 7]
+        rel_position: [-0.8448565316343529, 1.6267198409544192, -2.8]
+        size: 0.2
+      task_18:
+        period_num: 1
+        edges: [0, 8]
+        rel_position: [1.5029140741185842, -0.5488618093985744, -3.2]
+        size: 0.2
+      task_19:
+        period_num: 1
+        edges: [0, 9]
+        rel_position: [-1.1092146673653644, -0.4578676901699265, -3.6]
+        size: 0.2
