@@ -25,7 +25,9 @@ setup(
     entry_points={
         'console_scripts': [
             "manager = rvo.manager:main",
-            "agent_RVO = rvo.agent_RVO:main"
+            "manager_solo = rvo.manager_solo:main",
+            "agent_RVO = rvo.agent_RVO:main",
+            "rvo_solo = rvo.RVO_solo:main",
         ],
     },
 )
