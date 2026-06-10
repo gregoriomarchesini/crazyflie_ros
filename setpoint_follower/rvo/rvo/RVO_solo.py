@@ -63,6 +63,7 @@ class agent_RVO(Node) :
 
         self.drones_names = ['crazyflie{}'.format(i) for i in self.AGENTS_INDICES] # type: ignore
         self.name_to_index = {name: i for i, name in enumerate(self.drones_names)}
+        self.idx = self.name_to_index[f"crazyflie{self.NUMBER}"] # type: ignore
 
         odom_name = {True: "/odom" , False: "/pose"}
         odom_type = {True: Odometry, False: PoseStamped}
@@ -76,11 +77,12 @@ class agent_RVO(Node) :
             cmd_type = {True: Twist     , False: Twist}
 
         self.odom_subscribers = []
-        self.vel_publisher = self.create_publisher(Point, f"/vel_crazyflie{self.NUMBER}", 10)
+        self.vel_publisher = self.create_publisher(Point, f"/vel_{self.NUMBER}", 10)
         self.vel_subscribers = []
-        for drone in self.drones_names :
-            if drone != f"crazyflie{self.NUMBER}" :
-                self.vel_subscribers.append(self.create_subscription(Point, f"vel_{drone}", self.on_vel_callback, 10))
+        for idx, drone in enumerate(self.AGENTS_INDICES) : # type: ignore
+            if drone != self.NUMBER :
+                callback = lambda x, idx = idx: self.on_vel_callback(x, idx)
+                self.vel_subscribers.append(self.create_subscription(Point, f"/vel_{drone}", callback, 10))
 
         if self.simu:
             self.twist_publisher = self.create_publisher(cmd_type[self.simu],f"crazyflie{self.NUMBER}" + cmd_name[self.simu],10)
@@ -108,7 +110,7 @@ class agent_RVO(Node) :
         self.goal = None
         self.v_opt = np.zeros(3)
 
-        self.timer = self.create_timer(self.AGENT_TIMER, self.RVO_callback, callback_group= self.rvo_cb_group) # type: ignore
+        self.timer = self.create_timer(self.AGENT_TIMER, self.RVO_callback) # type: ignore
 
         self.state = AgentState.TAKEOFF
         self.get_logger().info(f'Agent state : {self.state.name}')
@@ -160,7 +162,7 @@ class agent_RVO(Node) :
             if self.state == AgentState.STOP:
                 self.get_logger().info(f'{AnsiColor.GREEN} Resuming from STOP command... {AnsiColor.RESET}')
                 self.state = AgentState.READY
-                self.timer = self.create_timer(self.AGENT_TIMER, self.RVO_callback, callback_group= self.rvo_cb_group) # type: ignore
+                self.timer = self.create_timer(self.AGENT_TIMER, self.RVO_callback) # type: ignore
 
     def odom_callback(self, msg, idx):
         self.pos[idx, 0] = msg.pose.pose.position.x
@@ -193,26 +195,19 @@ class agent_RVO(Node) :
             self.pos[idx, 2] = position.z
 
     def on_goal_callback(self, msg) :
-        # self.get_logger().info(f"{AnsiColor.VIOLET} receiving goals {AnsiColor.RESET}")
-        for goal in msg.goals :
-            # self.get_logger().info(f"{AnsiColor.VIOLET} receiving goal : has_one : {goal.has_one}, index : {goal.index}, pos : {goal.pos.x, goal.pos.y, goal.pos.z} {AnsiColor.RESET}")
-            name = "crazyflie" + str(goal.index)
-            if goal.has_one :
-                self.goals[self.name_to_index[name]] = np.array((goal.pos.x, goal.pos.y, goal.pos.z)) # type: ignore
-                if self.DIM == 2 :
-                    if self.simu :
-                        self.goals[self.name_to_index[name]][2] = self.hoover_heights[self.name_to_index[name]] # type: ignore
-            else :
-                self.goals[self.name_to_index[name]] = None
+        if msg.has_one :
+            self.goal = np.array((msg.pos.x, msg.pos.y, msg.pos.z))
+        else :
+            self.goal = None
 
-            dir = self.goals[self.name_to_index[name]] - self.pos[self.name_to_index[name]] if self.goals[self.name_to_index[name]] is not None else np.array((0, 0, 0))
+            dir = self.goal - self.pos[self.idx] if self.goal is not None else np.array((0, 0, 0))
             dir_norm = np.linalg.norm(dir)
-            self.v_opt[self.name_to_index[name]] = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
+            self.v_opt = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
             if self.DIM == 2 :
-                self.v_opt[self.name_to_index[name]][2] = 0
+                self.v_opt[2] = 0
 
-    def on_vel_callback(self, msg) :
-        pass # TODO
+    def on_vel_callback(self, msg, idx) :
+        self.vel[idx] = np.array((msg.x, msg.y, msg.z))
 
 # ──────── Take off ───────────────────────────────────────────────────────────────────────────────
 
@@ -224,15 +219,13 @@ class agent_RVO(Node) :
         take_off_finished = False
 
         if self.simu:
-            for idx, publisher in enumerate(self.twist_publishers):
-                msg = Twist()
-                msg.linear.z = np.clip((self.hoover_heights[idx] - self.pos[idx, 2]), -self.Z_SPEED, self.Z_SPEED) # go to one meter altitude
-                publisher.publish(msg)
+            msg = Twist()
+            msg.linear.z = np.clip((self.HOOVERING_HEIGHT - self.pos[self.idx, 2]), -self.Z_SPEED, self.Z_SPEED) # go to one meter altitude
+            self.twist_publisher.publish(msg)
         else :
             if not self.called_takeoff:
                 self.called_takeoff = True
-                for idx, publisher in enumerate(self.twist_publishers):
-                    self.takeoff(self.hoover_heights[idx], self.time_to_take_off, idx) # TODO: have a closer look at the height (ensure collsion avoidance)
+                self.takeoff(self.HOOVERING_HEIGHT, self.time_to_take_off) # TODO: have a closer look at the height (ensure collsion avoidance)
 
         self.get_logger().info(f'{AnsiColor.BLUE} Taking off... Time elapsed: {self.time.nanoseconds / 1e9:.2f}s. Will finish at {self.time_to_take_off*2.0}s {AnsiColor.RESET}',throttle_duration_sec=2.0)
 
@@ -242,13 +235,13 @@ class agent_RVO(Node) :
 
         return take_off_finished
 
-    def takeoff(self, targetHeight, duration, idx, groupMask=0):
+    def takeoff(self, targetHeight, duration, groupMask=0):
         req            = Takeoff.Request()
         req.group_mask = groupMask
         req.height     = targetHeight
         req.duration   = rclpy.duration.Duration(seconds=duration).to_msg() # type: ignore
         # Wait until service call completes
-        self.takeoff_services[idx].call_async(req)
+        self.takeoff_service.call_async(req)
 
 # ──────── Landing ────────────────────────────────────────────────────────────────────────────────
 
@@ -262,19 +255,25 @@ class agent_RVO(Node) :
         time_sec = self.time.nanoseconds / 1e9
 
         if self.simu:
-            for idx, publisher in enumerate(self.twist_publishers):
-                msg = Twist()
-                msg.linear.z = np.clip(-self.hoover_heights[idx]/self.landing_time, -self.Z_SPEED, self.Z_SPEED) # type: ignore
-                publisher.publish(msg)
+            msg = Twist()
+            msg.linear.z = np.clip(-self.HOOVERING_HEIGHT/self.landing_time, -self.Z_SPEED, self.Z_SPEED) # type: ignore
+            self.twist_publisher.publish(msg)
 
         else :
-            for idx, publisher in enumerate(self.twist_publishers):
+            if self.cmd_vel :
+                msg = Twist()
+                msg.linear.x = float(self.pos[self.idx, 0])
+                msg.linear.y = float(self.pos[self.idx, 1])
+                msg.linear.z = float(-self.HOOVERING_HEIGHT/self.landing_time) # type: ignore
+                msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
+                self.twist_publisher.publish(msg)
+            else :
                 pos   = Position()
-                pos.x = self.pos[idx, 0]
-                pos.y = self.pos[idx, 1]
-                pos.z = self.hoover_heights[idx]-self.hoover_heights[idx]/self.landing_time *(time_sec) # type: ignore
+                pos.x = self.pos[self.idx, 0]
+                pos.y = self.pos[self.idx, 1]
+                pos.z = self.HOOVERING_HEIGHT-self.HOOVERING_HEIGHT/self.landing_time *(time_sec) # type: ignore
                 pos.yaw = 0.
-                publisher.publish(pos)
+                self.twist_publisher.publish(pos)
         
         if time_sec > self.landing_time:
             self.get_logger().info(f'{AnsiColor.BLUE} Landing finished... {AnsiColor.RESET}', throttle_duration_sec=5.0)
@@ -285,42 +284,47 @@ class agent_RVO(Node) :
 # ──────── Apply RVO ────────────────────────────────────────────────────────────────────────────────
 
     def run_mission(self) :
-        new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel) for idx in range(self.NUM_AGENTS)])
+        new_vel = RVO_loc(self.idx, self.test_velocities, self.v_opt, self.pos, self.vel)
 
         if self.simu:
-            for idx, publisher in enumerate(self.twist_publishers):
-                msg = Twist()
-                msg.linear.x = float(new_vel[idx][0])
-                msg.linear.y = float(new_vel[idx][1])
-                msg.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
-                msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
-                publisher.publish(msg)
-                # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
-                self.vel[idx] = new_vel[idx]
-                if self.DIM == 2 :
-                    self.vel[idx][2] = 0
-        else :
-            for idx, publisher in enumerate(self.twist_publishers):
-                if self.cmd_vel :
-                    msg = Twist()
-                    msg.linear.x = float(new_vel[idx][0])
-                    msg.linear.y = float(new_vel[idx][1])
-                    msg.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
-                    msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
-                    publisher.publish(msg)
-                    # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
-                else :
-                    pos = Position()
-                    x_new = self.pos[idx] + new_vel[idx] * self.dt
-                    pos.x = float(x_new[0])
-                    pos.y = float(x_new[1])
-                    pos.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
-                    pos.yaw = 0.0
-                    publisher.publish(pos)
+            msg = Twist()
+            msg.linear.x = float(new_vel[0])
+            msg.linear.y = float(new_vel[1])
+            msg.linear.z = float(np.clip(self.HOOVERING_HEIGHT - self.pos[self.idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[2])
+            msg.angular.z = float(np.clip(0. - self.angles[self.idx, 2],-self.SPEED,self.SPEED)) # type: ignore
+            self.twist_publisher.publish(msg)
+            # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
+            self.vel[self.idx] = new_vel
+            if self.DIM == 2 :
+                self.vel[self.idx, 2] = 0
 
-                self.vel[idx] = new_vel[idx]
-                if self.DIM == 2 :
-                    self.vel[idx][2] = 0
+        else :
+            if self.cmd_vel :
+                msg = Twist()
+                msg.linear.x = float(new_vel[0])
+                msg.linear.y = float(new_vel[1])
+                msg.linear.z = float(np.clip(self.HOOVERING_HEIGHT - self.pos[self.idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[2])
+                msg.angular.z = float(np.clip(0. - self.angles[self.idx, 2],-self.SPEED,self.SPEED)) # type: ignore
+                self.twist_publisher.publish(msg)
+                # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
+            else :
+                pos = Position()
+                x_new = self.pos[self.idx] + new_vel * self.dt
+                pos.x = float(x_new[0])
+                pos.y = float(x_new[1])
+                pos.z = float(self.HOOVERING_HEIGHT) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                pos.yaw = 0.0
+                self.twist_publisher.publish(pos)
+
+            self.vel[self.idx] = new_vel
+            if self.DIM == 2 :
+                self.vel[self.idx, 2] = 0
+
+        msg = Point()
+        msg.x = float(self.vel[self.idx, 0])
+        msg.y = float(self.vel[self.idx, 1])
+        msg.z = float(self.vel[self.idx, 2])
+        self.vel_publisher.publish(msg)
 
 # ──────── Main loop ──────────────────────────────────────────────────────────────────────────────
 
@@ -328,7 +332,7 @@ class agent_RVO(Node) :
         self.time      = self.get_clock().now() - self.start_time
         self.state_publisher.publish(Int32(data=int(self.state)))
 
-        self.get_logger().info(f"{AnsiColor.BLUE}MPC STATE: {self.state.name} {AnsiColor.RESET}", throttle_duration_sec=3.0)
+        self.get_logger().info(f"{AnsiColor.BLUE}crazyflie {self.NUMBER} STATE: {self.state.name} {AnsiColor.RESET}", throttle_duration_sec=3.0)
 
         if self.land_pose is None:
             self.land_pose = self.pos.copy()
@@ -386,8 +390,8 @@ def is_in_vo(idx, other_idx, v_test, pos) :
 
 def RVO_loc(idx, test_velocities, v_opt, pos, vel) :
     DIST_DETECT = 3
-    v_tests = [v for v in test_velocities] + [v_opt[idx]]
-    v_tests.sort(key = lambda x : np.linalg.norm(v_opt[idx] - x))
+    v_tests = [v for v in test_velocities] + [v_opt]
+    v_tests.sort(key = lambda x : np.linalg.norm(v_opt - x))
     costs = [0 for _ in v_tests]
     for other_idx, pos_other in enumerate(pos) :
         if (other_idx != idx and np.linalg.norm(pos[idx] - pos_other) <= DIST_DETECT) :
@@ -401,8 +405,6 @@ def RVO_loc(idx, test_velocities, v_opt, pos, vel) :
 def signal_handler(sig, frame):
     print("Shutdown signal received, cleaning up...")
     rclpy.shutdown()
-    pool.join()
-    pool.close()
     sys.exit(0)
 
 def main(args=None):
@@ -418,8 +420,6 @@ def main(args=None):
     try:
         executor.spin()
     finally:
-        pool.join()
-        pool.close()
         agents.destroy_node()
         rclpy.shutdown()
 
