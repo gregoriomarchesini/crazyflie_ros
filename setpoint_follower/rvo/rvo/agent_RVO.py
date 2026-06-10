@@ -295,13 +295,22 @@ class agent_RVO(Node) :
                 publisher.publish(msg)
 
         else :
-            for idx, publisher in enumerate(self.twist_publishers):
-                pos   = Position()
-                pos.x = self.pos[idx, 0]
-                pos.y = self.pos[idx, 1]
-                pos.z = self.hoover_heights[idx]-self.hoover_heights[idx]/self.landing_time *(time_sec) # type: ignore
-                pos.yaw = 0.
-                publisher.publish(pos)
+            if self.cmd_vel :
+                for idx, publisher in enumerate(self.twist_publishers):
+                    msg = Twist()
+                    msg.linear.x = float(self.pos[idx][0])
+                    msg.linear.y = float(self.pos[idx][1])
+                    msg.linear.z = float(-self.hoover_heights[idx]/self.landing_time) # type: ignore
+                    msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
+                    publisher.publish(msg)
+            else :
+                for idx, publisher in enumerate(self.twist_publishers):
+                    pos   = Position()
+                    pos.x = self.pos[idx, 0]
+                    pos.y = self.pos[idx, 1]
+                    pos.z = self.hoover_heights[idx]-self.hoover_heights[idx]/self.landing_time *(time_sec) # type: ignore
+                    pos.yaw = 0.
+                    publisher.publish(pos)
         
         if time_sec > self.landing_time:
             self.get_logger().info(f'{AnsiColor.BLUE} Landing finished... {AnsiColor.RESET}', throttle_duration_sec=5.0)
