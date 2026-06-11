@@ -49,7 +49,7 @@ class agent_RVO(Node) :
             self.COMM_DISTANCE = np.inf
         self.AGENTS_INDICES   = self.get_parameter("AGENTS_INDICES").value
         self.NUM_AGENTS       = len(self.AGENTS_INDICES) # type: ignore
-        self.dt = 2*self.AGENT_TIMER
+        self.dt = 2*self.AGENT_TIMER # type: ignore
 
         self.landing_time = 10.0 # takes 8 seconds to land
         self.Z_SPEED      = 0.5
@@ -116,6 +116,7 @@ class agent_RVO(Node) :
         self.vel = np.zeros((self.NUM_AGENTS, 3))
         self.goals = [None for _ in range(self.NUM_AGENTS)]
         self.v_opt = np.zeros((self.NUM_AGENTS, 3))
+        self.dist_goal = [10 for _ in range(self.NUM_AGENTS)]
 
         self.timer = self.create_timer(self.AGENT_TIMER, self.RVO_callback, callback_group= self.rvo_cb_group) # type: ignore
 
@@ -203,7 +204,7 @@ class agent_RVO(Node) :
         self.angles[idx, 0] = euler[0]
         self.angles[idx, 1] = euler[1]
         self.angles[idx, 2] = euler[2]
-        # self.compute_min_dist()
+        self.dist_goal[idx] = np.linalg.norm(self.pos[idx]-self.goals[idx]) if self.goals[idx] is not None else 10 # type: ignore
 
     def poses_callback(self, msg):
         for p in msg.poses:
@@ -222,6 +223,7 @@ class agent_RVO(Node) :
             self.v_opt[idx] = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
             if self.DIM == 2 :
                 self.v_opt[idx][2] = 0
+            self.dist_goal[idx] = np.linalg.norm(self.pos[idx]-self.goals[idx]) if self.goals[idx] is not None else 10 # type: ignore
             # self.get_logger().info(f"{AnsiColor.VIOLET} receiving pos {self.pos[idx]} for drone {p.name} for goal {self.goals[idx]} {AnsiColor.RESET}")
 
     def on_goal_callback(self, msg) :
@@ -347,7 +349,7 @@ class agent_RVO(Node) :
                     msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
                     publisher.publish(msg)
                 else :
-                    MINIMAL_SIZE_STEP = .05
+                    MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .2 else .1
                     dp = new_vel[idx]*self.dt
                     dp_norm = np.linalg.norm(dp)
                     if dp_norm < MINIMAL_SIZE_STEP :
