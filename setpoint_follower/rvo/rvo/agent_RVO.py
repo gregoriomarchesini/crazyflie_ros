@@ -49,7 +49,7 @@ class agent_RVO(Node) :
             self.COMM_DISTANCE = np.inf
         self.AGENTS_INDICES   = self.get_parameter("AGENTS_INDICES").value
         self.NUM_AGENTS       = len(self.AGENTS_INDICES) # type: ignore
-        self.dt = 0.1
+        self.dt = 2*self.AGENT_TIMER
 
         self.landing_time = 10.0 # takes 8 seconds to land
         self.Z_SPEED      = 0.5
@@ -222,6 +222,7 @@ class agent_RVO(Node) :
             self.v_opt[idx] = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
             if self.DIM == 2 :
                 self.v_opt[idx][2] = 0
+            # self.get_logger().info(f"{AnsiColor.VIOLET} receiving pos {self.pos[idx]} for drone {p.name} for goal {self.goals[idx]} {AnsiColor.RESET}")
 
     def on_goal_callback(self, msg) :
         # self.get_logger().info(f"{AnsiColor.VIOLET} receiving goals {AnsiColor.RESET}")
@@ -345,10 +346,16 @@ class agent_RVO(Node) :
                     msg.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
                     msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
                     publisher.publish(msg)
-                    # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
                 else :
+                    MINIMAL_SIZE_STEP = .05
+                    dp = new_vel[idx]*self.dt
+                    dp_norm = np.linalg.norm(dp)
+                    if dp_norm < MINIMAL_SIZE_STEP :
+                        dp = dp/dp_norm * MINIMAL_SIZE_STEP
+                    x_new = self.pos[idx] + dp
+                    if idx == self.name_to_index[f"crazyflie6"] :
+                        self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]}; x_new : {x_new} {AnsiColor.RESET}", throttle_duration_sec=1.0)
                     pos = Position()
-                    x_new = self.pos[idx] + new_vel[idx] * self.dt
                     pos.x = float(x_new[0])
                     pos.y = float(x_new[1])
                     pos.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
