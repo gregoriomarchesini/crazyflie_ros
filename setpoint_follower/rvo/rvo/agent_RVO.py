@@ -127,6 +127,7 @@ class agent_RVO(Node) :
         
         self.start_time = self.get_clock().now()
         self.start_takeoff_time = None
+        self.called_takeoff = False
         self.start_landing_time = None
         self.start_mission_time = None
 
