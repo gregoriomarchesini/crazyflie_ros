@@ -16,7 +16,7 @@ from nav_msgs.msg import Odometry
 from rvo_interface.msg import Goal, Goallist  # type: ignore
 from std_msgs.msg import Int32, Bool
 from geometry_msgs.msg import Point, PoseStamped, Twist
-from crazyflie_interfaces.msg import Position, FullState
+from crazyflie_interfaces.msg import Position, FullState, VelocityWorld
 
 from crazyflie_interfaces.srv import Takeoff
 
@@ -73,8 +73,8 @@ class agent_RVO(Node) :
 
         self.cmd_vel = False
         if self.cmd_vel :
-            cmd_name = {True: "/cmd_vel", False: "/cmd_velocity_world"}
-            cmd_type = {True: Twist     , False: Twist}
+            cmd_name = {True: "/cmd_vel", False: "/cmd_vel_world"}
+            cmd_type = {True: Twist     , False: VelocityWorld}
 
         self.odom_subscribers = []
         self.vel_publisher = self.create_publisher(Point, f"/vel_{self.NUMBER}", 10)
@@ -109,6 +109,7 @@ class agent_RVO(Node) :
         self.vel = np.zeros((self.NUM_AGENTS, 3))
         self.goal = None
         self.v_opt = np.zeros(3)
+        self.dist_goal = 10
 
         self.timer = self.create_timer(self.AGENT_TIMER, self.RVO_callback) # type: ignore
 
@@ -194,17 +195,21 @@ class agent_RVO(Node) :
             self.pos[idx, 1] = position.y
             self.pos[idx, 2] = position.z
 
+            if idx == self.idx :
+                self.dist_goal = np.linalg.norm(self.pos[idx]-self.goal) if self.goal is not None else 10
+
     def on_goal_callback(self, msg) :
         if msg.has_one :
             self.goal = np.array((msg.pos.x, msg.pos.y, msg.pos.z))
         else :
             self.goal = None
 
-            dir = self.goal - self.pos[self.idx] if self.goal is not None else np.array((0, 0, 0))
-            dir_norm = np.linalg.norm(dir)
-            self.v_opt = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
-            if self.DIM == 2 :
-                self.v_opt[2] = 0
+        dir = self.goal - self.pos[self.idx] if self.goal is not None else np.array((0, 0, 0))
+        dir_norm = np.linalg.norm(dir)
+        self.v_opt = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
+        if self.DIM == 2 :
+            self.v_opt[2] = 0
+        self.dist_goal = np.linalg.norm(self.pos[self.idx]-self.goal) if self.goal is not None else 10
 
     def on_vel_callback(self, msg, idx) :
         self.vel[idx] = np.array((msg.x, msg.y, msg.z))
@@ -216,7 +221,6 @@ class agent_RVO(Node) :
             self.start_takeoff_time = self.get_clock().now()
         
         self.time         = self.get_clock().now() - self.start_takeoff_time
-        take_off_finished = False
 
         if self.simu:
             msg = Twist()
@@ -229,11 +233,7 @@ class agent_RVO(Node) :
 
         self.get_logger().info(f'{AnsiColor.BLUE} Taking off... Time elapsed: {self.time.nanoseconds / 1e9:.2f}s. Will finish at {self.time_to_take_off*2.0}s {AnsiColor.RESET}',throttle_duration_sec=2.0)
 
-        if self.time.nanoseconds / 1e9 > self.time_to_take_off*2.0:
-            self.get_logger().info(f' {AnsiColor.BLUE} Take off finished... {AnsiColor.RESET}')
-            take_off_finished = True
-
-        return take_off_finished
+        return abs(self.pos[self.idx, 2]-self.HOOVERING_HEIGHT) < .2
 
     def takeoff(self, targetHeight, duration, groupMask=0):
         req            = Takeoff.Request()
@@ -250,22 +250,15 @@ class agent_RVO(Node) :
         if self.start_landing_time is None:
             self.start_landing_time = self.get_clock().now()
 
-        self.time         = self.get_clock().now() - self.start_landing_time
-        landing_finished  = False
-        time_sec = self.time.nanoseconds / 1e9
-
         if self.simu:
             msg = Twist()
-            msg.linear.z = np.clip(-self.HOOVERING_HEIGHT/self.landing_time, -self.Z_SPEED, self.Z_SPEED) # type: ignore
+            msg.linear.z = float(np.clip(-self.HOOVERING_HEIGHT/self.landing_time, -self.Z_SPEED, self.Z_SPEED)) if self.DIM == 2 else float(np.clip(-self.pos[self.idx, 2], -self.Z_SPEED, self.Z_SPEED)) # type: ignore
             self.twist_publisher.publish(msg)
 
         else :
             if self.cmd_vel :
-                msg = Twist()
-                msg.linear.x = float(self.pos[self.idx, 0])
-                msg.linear.y = float(self.pos[self.idx, 1])
-                msg.linear.z = float(-self.HOOVERING_HEIGHT/self.landing_time) # type: ignore
-                msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
+                msg = VelocityWorld()
+                msg.vel.z = float(np.clip(-self.HOOVERING_HEIGHT/self.landing_time, -self.Z_SPEED, self.Z_SPEED)) if self.DIM == 2 else float(np.clip(-self.pos[self.idx, 2], -self.Z_SPEED, self.Z_SPEED))  # type: ignore
                 self.twist_publisher.publish(msg)
             else :
                 pos   = Position()
@@ -275,11 +268,7 @@ class agent_RVO(Node) :
                 pos.yaw = 0.
                 self.twist_publisher.publish(pos)
         
-        if time_sec > self.landing_time:
-            self.get_logger().info(f'{AnsiColor.BLUE} Landing finished... {AnsiColor.RESET}', throttle_duration_sec=5.0)
-            landing_finished = True
-
-        return landing_finished
+        return self.pos[self.idx, 2] <.05
 
 # ──────── Apply RVO ────────────────────────────────────────────────────────────────────────────────
 
@@ -300,18 +289,26 @@ class agent_RVO(Node) :
 
         else :
             if self.cmd_vel :
-                msg = Twist()
-                msg.linear.x = float(new_vel[0])
-                msg.linear.y = float(new_vel[1])
-                msg.linear.z = float(np.clip(self.HOOVERING_HEIGHT - self.pos[self.idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[2])
-                msg.angular.z = float(np.clip(0. - self.angles[self.idx, 2],-self.SPEED,self.SPEED)) # type: ignore
+                msg = VelocityWorld()
+                msg.vel.x = float(new_vel[0])
+                msg.vel.y = float(new_vel[1])
+                msg.vel.z = float(np.clip(self.HOOVERING_HEIGHT - self.pos[self.idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[2])
+                msg.yaw_rate = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
                 self.twist_publisher.publish(msg)
                 # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
             else :
+                if self.dist_goal < .1 and np.array_equal(new_vel, self.v_opt) :
+                    x_new = self.goal
+                else :
+                    MINIMAL_SIZE_STEP = .05 if self.dist_goal < .2 else .1
+                    dp = new_vel*self.dt
+                    dp_norm = np.linalg.norm(dp)
+                    if dp_norm < MINIMAL_SIZE_STEP :
+                        dp = dp/dp_norm * MINIMAL_SIZE_STEP
+                    x_new = self.pos[self.idx] + dp
                 pos = Position()
-                x_new = self.pos[self.idx] + new_vel * self.dt
-                pos.x = float(x_new[0])
-                pos.y = float(x_new[1])
+                pos.x = float(x_new[0]) # type: ignore
+                pos.y = float(x_new[1]) # type: ignore
                 pos.z = float(self.HOOVERING_HEIGHT) if self.DIM == 2 else float(x_new[2]) # type: ignore
                 pos.yaw = 0.0
                 self.twist_publisher.publish(pos)

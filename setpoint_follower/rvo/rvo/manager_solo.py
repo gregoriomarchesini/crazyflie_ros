@@ -53,6 +53,9 @@ class Manager(Node) :
             depth=10
         )
 
+        self.drones_names = ['crazyflie{}'.format(i) for i in self.AGENTS_INDICES] # type: ignore
+        self.name_to_index = {name: i for i, name in enumerate(self.drones_names)}
+
         ##
         self.start_time = None
         self.ready_count = 0
@@ -66,9 +69,6 @@ class Manager(Node) :
         self.triggered_times = set()
 
         #setup all the subscribers and publishers
-
-        self.drones_names = ['crazyflie{}'.format(i) for i in self.AGENTS_INDICES] # type: ignore
-        self.name_to_index = {name: i for i, name in enumerate(self.drones_names)}
         
         self.odom_subscribers        = []
         self.goals_pub                = []
@@ -186,6 +186,7 @@ class Manager(Node) :
 
     def compute_goals(self) :
         known_pos = {}
+        fixed_goals = False
         waiting_task = set()
         moving_bots = []
         if len(self.recalc_times) > 0 :
@@ -193,37 +194,46 @@ class Manager(Node) :
                 task = self.tasks[-1]
                 if task.timespan[1] > self.recalc_times[0] :
                     break
-                else :
+                if task.is_goal :
+                    fixed_goals = True
+                    known_pos[task.bot] = task.goal
+                elif fixed_goals :
                     edge = [self.AGENTS_INDICES[e] for e in task.edges] # type: ignore
-                    if len(known_pos) == 0 :
-                        known_pos[edge[0]] = np.array((0, 0)) if self.DIM == 2 else np.array((0, 0, 0))
-                        known_pos[edge[1]] = np.array(task.rel_position)
-                        moving_bots.append(edge[0])
+                    self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, edge : {[self.AGENTS_INDICES[e] for e in task.edges]}, rel_pos : {task.rel_position} {AnsiColor.RESET}") # type: ignore
+                    if edge[0] in known_pos.keys() and edge[1] in known_pos.keys():
+                        if not np.array_equal(known_pos[edge[1]] - known_pos[edge[0]], np.array(task.rel_position)) :
+                            self.get_logger().info(f"{AnsiColor.YELLOW} known_pos : {known_pos} {AnsiColor.RESET}")
+                            self.get_logger().error(f"{AnsiColor.RED} error : the tasks are not feasible {AnsiColor.RESET}")
+                            self.landing_command_pub.publish(Bool(data=True))
+                            return
+                    elif edge[0] in known_pos.keys() :
+                        known_pos[edge[1]] = known_pos[edge[0]] + np.array(task.rel_position)
                         moving_bots.append(edge[1])
+                    elif edge[1] in known_pos.keys() :
+                        known_pos[edge[0]] = known_pos[edge[1]] - np.array(task.rel_position)
+                        moving_bots.append(edge[0])
                     else :
-                        self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, edge : {[self.AGENTS_INDICES[e] for e in task.edges]}, rel_pos : {task.rel_position} {AnsiColor.RESET}") # type: ignore
-                        if edge[0] in known_pos.keys() and edge[1] in known_pos.keys():
-                            if not np.array_equal(known_pos[edge[1]] - known_pos[edge[0]], np.array(task.rel_position)) :
-                                self.get_logger().info(f"{AnsiColor.YELLOW} known_pos : {known_pos} {AnsiColor.RESET}")
-                                self.get_logger().error(f"{AnsiColor.RED} error : the tasks are not feasible {AnsiColor.RESET}")
-                        elif edge[0] in known_pos.keys() :
-                            known_pos[edge[1]] = known_pos[edge[0]] + np.array(task.rel_position)
-                            moving_bots.append(edge[1])
-                        elif edge[1] in known_pos.keys() :
-                            known_pos[edge[0]] = known_pos[edge[1]] - np.array(task.rel_position)
-                            moving_bots.append(edge[0])
-                        else :
-                            waiting_task.add(task)
+                        waiting_task.add(task)
+                    self.tasks.pop()
+                else :
+                    waiting_task.add(task)
                     self.tasks.pop()
 
             while len(waiting_task) > 0 :
                 wait_copy = set()
                 for task in waiting_task :
                     edge = [self.AGENTS_INDICES[e] for e in task.edges] # type: ignore
+                    if len(known_pos) == 0 :
+                        known_pos[edge[0]] = np.array((0, 0)) if self.DIM == 2 else np.array((0, 0, 0))
+                        known_pos[edge[1]] = np.array(task.rel_position)
+                        moving_bots.append(edge[0])
+                        moving_bots.append(edge[1])
                     if edge[0] in known_pos.keys() and edge[1] in known_pos.keys():
                         if not np.array_equal(known_pos[edge[1]] - known_pos[edge[0]], np.array(task.rel_position)) :
                             self.get_logger().info(f"{AnsiColor.YELLOW} known_pos : {known_pos} {AnsiColor.RESET}")
                             self.get_logger().error(f"{AnsiColor.RED} error : the tasks are not feasible {AnsiColor.RESET}")
+                            self.landing_command_pub.publish(Bool(data=True))
+                            return
                     elif edge[0] in known_pos.keys() :
                         known_pos[edge[1]] = known_pos[edge[0]] + np.array(task.rel_position)
                         moving_bots.append(edge[1])
@@ -236,46 +246,47 @@ class Manager(Node) :
 
             moving_bots.sort()
 
-            # # Set the centre of the shape in (0, 0)
-            min_x = min_y = 0
-            max_x = max_y = 0
-            max_z = min_z = 0
-            for p in known_pos.values() :
-                min_x = min(min_x, p[0])
-                max_x = max(max_x, p[0])
-                min_y = min(min_y, p[1])
-                max_y = max(max_y, p[1])
-                if self.DIM == 3 :
-                    min_z = min(min_z, p[2])
-                    max_z = max(max_z, p[2])
+            if fixed_goals == False :
+                # # Set the centre of the shape in (0, 0)
+                min_x = min_y = 0
+                max_x = max_y = 0
+                max_z = min_z = 0
+                for p in known_pos.values() :
+                    min_x = min(min_x, p[0])
+                    max_x = max(max_x, p[0])
+                    min_y = min(min_y, p[1])
+                    max_y = max(max_y, p[1])
+                    if self.DIM == 3 :
+                        min_z = min(min_z, p[2])
+                        max_z = max(max_z, p[2])
 
-            c = np.array((max_x + min_x, max_y + min_y))/2 if self.DIM == 2 else np.array((max_x + min_x, max_y + min_y, 2*(min_z - .5)))/2
+                c = np.array((max_x + min_x, max_y + min_y))/2 if self.DIM == 2 else np.array((max_x + min_x, max_y + min_y, 2*(min_z - .5)))/2
 
-            for k, v in known_pos.items() :
-                known_pos[k] = v - c
+                for k, v in known_pos.items() :
+                    known_pos[k] = v - c
 
-            # # # Place the drones by solving a minimization pb
-            # constraints = []
-            # x0 = [known_pos[moving_bots[0]][0], known_pos[moving_bots[0]][1]] if self.DIM == 2 else [known_pos[moving_bots[0]][0], known_pos[moving_bots[0]][1], known_pos[moving_bots[0]][2]]
-            # for i in range(1, len(moving_bots)) :
-            #     x0 += [known_pos[moving_bots[i]][0], known_pos[moving_bots[i]][1]] if self.DIM == 2 else [known_pos[moving_bots[i]][0], known_pos[moving_bots[i]][1], known_pos[moving_bots[i]][2]]
-            #     A = np.zeros((self.DIM, self.DIM*len(moving_bots))) # type: ignore
-            #     for d in range(self.DIM) : # type: ignore
-            #         A[d, d] = 1
-            #         A[d, i*self.DIM + d] = -1 # type: ignore
-            #     dp = known_pos[moving_bots[0]] - known_pos[moving_bots[i]]
-            #     constraints.append(LinearConstraint(A, dp, dp))
-            # if self.DIM == 3 :
-            #     A = np.zeros((len(moving_bots), self.DIM*len(moving_bots)))
-            #     for i in range(len(moving_bots)) :
-            #         A[i][3*i+2] = 1
-            #     constraints.append(LinearConstraint(A, lb = 0.2))
-            # res = minimize(lambda x : self.cost_func(x, moving_bots), x0, method="trust-constr", constraints=constraints)
-            # self.get_logger().info(f"{AnsiColor.VIOLET} constraint violation : {res.constr_violation} {AnsiColor.RESET}")
-            # # self.get_logger().info(f"{AnsiColor.VIOLET} result : {res.x} {AnsiColor.RESET}")
-            # sol = res.x
-            # for idx, bot in enumerate(moving_bots) :
-            #     known_pos[bot] = np.array([sol[self.DIM*idx + d] for d in range(self.DIM)]) # type: ignore
+                # # # Place the drones by solving a minimization pb
+                # constraints = []
+                # x0 = [known_pos[moving_bots[0]][0], known_pos[moving_bots[0]][1]] if self.DIM == 2 else [known_pos[moving_bots[0]][0], known_pos[moving_bots[0]][1], known_pos[moving_bots[0]][2]]
+                # for i in range(1, len(moving_bots)) :
+                #     x0 += [known_pos[moving_bots[i]][0], known_pos[moving_bots[i]][1]] if self.DIM == 2 else [known_pos[moving_bots[i]][0], known_pos[moving_bots[i]][1], known_pos[moving_bots[i]][2]]
+                #     A = np.zeros((self.DIM, self.DIM*len(moving_bots))) # type: ignore
+                #     for d in range(self.DIM) : # type: ignore
+                #         A[d, d] = 1
+                #         A[d, i*self.DIM + d] = -1 # type: ignore
+                #     dp = known_pos[moving_bots[0]] - known_pos[moving_bots[i]]
+                #     constraints.append(LinearConstraint(A, dp, dp))
+                # if self.DIM == 3 :
+                #     A = np.zeros((len(moving_bots), self.DIM*len(moving_bots)))
+                #     for i in range(len(moving_bots)) :
+                #         A[i][3*i+2] = 1
+                #     constraints.append(LinearConstraint(A, lb = 0.2))
+                # res = minimize(lambda x : self.cost_func(x, moving_bots), x0, method="trust-constr", constraints=constraints)
+                # self.get_logger().info(f"{AnsiColor.VIOLET} constraint violation : {res.constr_violation} {AnsiColor.RESET}")
+                # # self.get_logger().info(f"{AnsiColor.VIOLET} result : {res.x} {AnsiColor.RESET}")
+                # sol = res.x
+                # for idx, bot in enumerate(moving_bots) :
+                #     known_pos[bot] = np.array([sol[self.DIM*idx + d] for d in range(self.DIM)]) # type: ignore
 
         # self.get_logger().info(f"{AnsiColor.VIOLET} known_pos : {known_pos} {AnsiColor.RESET}")
         for idx, i in enumerate(self.AGENTS_INDICES) : # type: ignore
@@ -284,9 +295,9 @@ class Manager(Node) :
             point = Point()
             if i in known_pos.keys() :
                 goal.has_one = True
-                point.x = known_pos[i][0]
-                point.y = known_pos[i][1]
-                point.z = 0. if self.DIM == 2 else known_pos[i][2]
+                point.x = float(known_pos[i][0])
+                point.y = float(known_pos[i][1])
+                point.z = 0. if self.DIM == 2 else float(known_pos[i][2])
             else :
                 goal.has_one = False
                 point.x = 0.
@@ -334,9 +345,7 @@ class Manager(Node) :
                 current_time = current_time.nanoseconds / 1e9
                 
                 self.update_and_publish_goals(current_time)
-            else :
-                self.get_logger().info(f"{AnsiColor.BOLD_GREEN} Not all agent are ready, waiting for {not_ready} {AnsiColor.RESET}")
-            if all_stopped :
+            elif all_stopped :
                 self.get_logger().info(f"{AnsiColor.BOLD_GREEN} RVO externally stopped . {AnsiColor.RESET}",throttle_duration_sec=5.0)
 
             elif all_landing :
@@ -387,23 +396,33 @@ class Manager(Node) :
             # remap edges to to the agent indices. Agents in the algorithm go from 1 to n
             # but user might decide different indices in the hardware setup 
             
-            try :
-                data['edges'] = (self.AGENTS_INDICES.index(data['edges'][0]), self.AGENTS_INDICES.index(data['edges'][1])) # type: ignore
-            except ValueError as e:
-                raise ValueError(f"Task {name} has edges {data['edges']} which include agent indices not in AGENTS_INDICES parameter {self.AGENTS_INDICES}. Please make sure all agents involved in tasks are included in AGENTS_INDICES.") from e
-
-            try:
+            if 'goal' in data :
                 tasks.append(Task(
-                                timespan    = periods[data['period_num']],
-                                edges       = data['edges'],
-                                rel_position= data['rel_position'],
-                                size        = data['size'],
-                                period_num  = data['period_num'],
-                                operator    = data.get('operator', 'always')
+                    timespan = periods[data["period_num"]],
+                    is_goal = True,
+                    bot = data["bot"],
+                    period_num= data["period_num"],
+                    goal = data["goal"]
+                ))
+            else :
+                try :
+                    data['edges'] = (self.AGENTS_INDICES.index(data['edges'][0]), self.AGENTS_INDICES.index(data['edges'][1])) # type: ignore
+                except ValueError as e:
+                    raise ValueError(f"Task {name} has edges {data['edges']} which include agent indices not in AGENTS_INDICES parameter {self.AGENTS_INDICES}. Please make sure all agents involved in tasks are included in AGENTS_INDICES.") from e
+
+                try:
+                    tasks.append(Task(
+                                    timespan    = periods[data['period_num']],
+                                    is_goal= False,
+                                    edges       = data['edges'],
+                                    rel_position= data['rel_position'],
+                                    size        = data['size'],
+                                    period_num  = data['period_num'],
+                                    operator    = data.get('operator', 'always')
+                                    )
                                 )
-                            )
-            except Exception as e:
-                raise e
+                except Exception as e:
+                    raise e
             
         tasks.sort(key = lambda x : x.timespan[1], reverse= True)
 

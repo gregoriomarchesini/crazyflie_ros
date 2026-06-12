@@ -52,10 +52,13 @@ class AnsiColor(str, Enum):
 class Task:
     __counter = 0
     def __init__(self, timespan: tuple[int, int], 
-                       edges: tuple[int, int], 
-                       rel_position: tuple[float, float] | tuple[float, float, float], 
-                       size: float, 
                        period_num:int,
+                       is_goal : bool,
+                       edges: tuple[int, int] = (0, 0),
+                       size: float = 0, 
+                       bot : int = 0,
+                       goal : tuple[int, int] | tuple[int, int, int] = (0, 0),
+                       rel_position: tuple[float, float] | tuple[float, float, float] = (0,0),
                        operator: str = "always"):
         self.timespan     = timespan
         self.edges        = edges
@@ -64,4 +67,7 @@ class Task:
         self.period_num   = period_num
         self.operator     = operator
         self.ID           = Task.__counter
+        self.is_goal = is_goal
+        self.bot = bot
+        self.goal = goal
         Task.__counter  += 1
