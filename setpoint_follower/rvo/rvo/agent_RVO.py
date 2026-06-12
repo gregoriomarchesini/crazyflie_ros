@@ -73,7 +73,7 @@ class agent_RVO(Node) :
 
         self.cmd_vel = False
         if self.cmd_vel :
-            cmd_name = {True: "/cmd_vel", False: "/cmd_vel_world"}
+            cmd_name = {True: "/cmd_vel", False: "/cmd_velocity_world"}
             cmd_type = {True: Twist     , False: VelocityWorld}
 
         self.odom_subscribers = []
@@ -99,16 +99,19 @@ class agent_RVO(Node) :
 
             for drone in self.drones_names:
 
-                goto_service = self.create_client(GoTo, drone + "/go_to")
+                if self.cmd_vel :
+                    self.twist_publishers.append(
+                        self.create_publisher(cmd_type[self.simu], drone + cmd_name[self.simu], 10)
+                    )
 
-                while not goto_service.wait_for_service(timeout_sec=1) :
-                    self.get_logger().warn('goto service not available, waiting again... Make sure the crazyswarm is launched')
+                else :
+                    goto_service = self.create_client(GoTo, drone + "/go_to")
 
-                self.twist_publishers.append(goto_service)
+                    while not goto_service.wait_for_service(timeout_sec=1) :
+                        self.get_logger().warn('goto service not available, waiting again... Make sure the crazyswarm is launched')
 
-                # self.twist_publishers.append(
-                #     self.create_publisher(cmd_type[self.simu], drone + cmd_name[self.simu], 10)
-                # )
+                    self.twist_publishers.append(goto_service)
+
 
                 takeoffService = self.create_client(Takeoff, drone + '/takeoff')
 
@@ -297,6 +300,7 @@ class agent_RVO(Node) :
             self.start_landing_time = self.get_clock().now()
 
         self.time         = self.get_clock().now() - self.start_landing_time
+        time_sec = self.time.nanoseconds / 1e9
 
         if self.simu:
             for idx, publisher in enumerate(self.twist_publishers):
@@ -324,12 +328,12 @@ class agent_RVO(Node) :
                     goal.y = self.pos[idx, 1]
                     goal.z = self.hoover_heights[idx]-self.hoover_heights[idx]/self.landing_time * (time_sec) # type: ignore
                     req.goal = goal
-                    req.yaw = 0
+                    req.yaw = 0.
                     self.twist_publishers[idx].call_async(req)
 
         landing_finished = True
         for pos in self.pos :
-            if pos[2] > 0.05 :
+            if pos[2] > 0.15 :
                 landing_finished = False
                 break
 
@@ -362,13 +366,13 @@ class agent_RVO(Node) :
                     msg.yaw_rate = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
                     publisher.publish(msg)
                 else :
-                    if self.dist_goal[idx] < .1 and np.array_equal(new_vel[idx], self.v_opt[idx]) :
+                    if self.dist_goal[idx] < .2 and np.array_equal(new_vel[idx], self.v_opt[idx]) :
                         x_new = self.goals[idx]
                     else :
-                        MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .2 else .1
+                        MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
                         dp = new_vel[idx]*self.dt
                         dp_norm = np.linalg.norm(dp)
-                        if dp_norm < MINIMAL_SIZE_STEP :
+                        if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[idx], self.v_opt[idx]) :
                             dp = dp/dp_norm * MINIMAL_SIZE_STEP
                         x_new = self.pos[idx] + dp
                     if idx == self.name_to_index[f"crazyflie6"] :
@@ -385,7 +389,7 @@ class agent_RVO(Node) :
                     goal.y = float(x_new[1]) # type: ignore
                     goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                     req.goal = goal
-                    req.yaw = 0
+                    req.yaw = 0.
                     self.twist_publishers[idx].call_async(req)
 
                 self.vel[idx] = new_vel[idx]
@@ -434,7 +438,7 @@ class agent_RVO(Node) :
 
 def is_in_vo(idx, other_idx, v_test, pos) :
     TAU = 300
-    RADIUS = .09
+    RADIUS = .15
     MARGIN = 0
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :

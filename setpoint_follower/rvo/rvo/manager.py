@@ -5,7 +5,7 @@ import numpy as np
 
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from scipy.optimize import minimize, LinearConstraint
+# from scipy.optimize import minimize, LinearConstraint
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rvo.utils import WorkingMode, AgentState, ManagerState, AnsiColor, Task
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
@@ -188,8 +188,10 @@ class Manager(Node) :
                 if task.timespan[1] > self.recalc_times[0] :
                     break
                 if task.is_goal :
+                    self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, bot : {task.bot}, goal : {task.goal} {AnsiColor.RESET}")
                     fixed_goals = True
                     known_pos[task.bot] = task.goal
+                    self.tasks.pop()
                 elif fixed_goals :
                     edge = [self.AGENTS_INDICES[e] for e in task.edges] # type: ignore
                     # self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, edge : {[self.AGENTS_INDICES[e] for e in task.edges]}, rel_pos : {task.rel_position} {AnsiColor.RESET}") # type: ignore
