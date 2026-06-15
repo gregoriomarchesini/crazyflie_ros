@@ -18,7 +18,7 @@ from std_msgs.msg import Int32, Bool
 from geometry_msgs.msg import Point, PoseStamped, Twist
 from crazyflie_interfaces.msg import Position, FullState, VelocityWorld
 
-from crazyflie_interfaces.srv import Takeoff, GoTo, Land
+from crazyflie_interfaces.srv import Takeoff, GoTo, Land, NotifySetpointsStop
 
 class agent_RVO(Node) :
     def __init__(self) :
@@ -72,6 +72,7 @@ class agent_RVO(Node) :
         cmd_type = {True: Twist     , False: Position}
 
         self.cmd_vel = False
+        self.cmd_all = True
         if self.cmd_vel :
             cmd_name = {True: "/cmd_vel", False: "/cmd_full_state"}
             cmd_type = {True: Twist     , False: FullState}
@@ -81,7 +82,6 @@ class agent_RVO(Node) :
         self.takeoff_services = []
         self.landing_services = []
         self.start_height = []
-        self.cmd_all = False
         if self.cmd_all and not self.simu:
             self.takeoff_services = self.create_client(Takeoff, 'all/takeoff')
             while not self.takeoff_services.wait_for_service(timeout_sec=1) :
@@ -359,6 +359,7 @@ class agent_RVO(Node) :
                 if not self.called_landing :
                     self.called_landing = True
                     if self.cmd_all :
+                        # self.get_logger().info(f"{AnsiColor.VIOLET} landing called at height {self.start_height} {AnsiColor.RESET}")
                         req = Land.Request()
                         req.group_mask = 0
                         req.height = self.start_height + 0.05 # type: ignore
@@ -405,9 +406,15 @@ class agent_RVO(Node) :
                     MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
                     dp = new_vel[idx]*self.dt
                     dp_norm = np.linalg.norm(dp)
+                    if self.cmd_vel :
+                        MINIMAL_SIZE_STEP = .2
                     if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[idx], self.v_opt[idx]) :
                         dp = dp/dp_norm * MINIMAL_SIZE_STEP
                     x_new = self.pos[idx] + dp
+                if idx == self.name_to_index[f"crazyflie6"] :
+                    new_vel[idx][2] = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
+                    x_new[2] = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2])
+                    self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]},\n\t\t pos : {self.pos[idx]},\n\t\t goal : {self.goals[idx]},\n\t\t v_opt : {self.v_opt[idx]};\n\t\t x_new : {x_new} {AnsiColor.RESET}\n", throttle_duration_sec=1)
                 if self.cmd_vel :
                     msg = FullState()
                     msg.twist.linear.x = float(new_vel[idx][0])
@@ -418,10 +425,7 @@ class agent_RVO(Node) :
                     msg.pose.position.y = float(x_new[1]) # type: ignore
                     msg.pose.position.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                     publisher.publish(msg)
-                    publisher.publish(msg)
                 else :
-                    if idx == self.name_to_index[f"crazyflie6"] :
-                        self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]}; x_new : {x_new} {AnsiColor.RESET}", throttle_duration_sec=1.0)
                     req = GoTo.Request()
                     goal = Point()
                     goal.x = float(x_new[0]) # type: ignore
@@ -476,8 +480,8 @@ class agent_RVO(Node) :
             rclpy.spin_once(self, timeout_sec=0.1)
 
 def is_in_vo(idx, other_idx, v_test, pos) :
-    TAU = 300
-    RADIUS = .15
+    TAU = 350
+    RADIUS = .13
     MARGIN = 0
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :
