@@ -1,5 +1,6 @@
 import sys
 import rclpy
+import signal
 import numpy as np
 import tf_transformations
 
@@ -18,6 +19,7 @@ from std_msgs.msg import Int32, Bool
 from geometry_msgs.msg import Point, PoseStamped, Twist
 from crazyflie_interfaces.msg import Position, FullState, VelocityWorld
 
+from std_srvs.srv import Empty
 from crazyflie_interfaces.srv import Takeoff, GoTo, Land, NotifySetpointsStop
 
 class agent_RVO(Node) :
@@ -139,6 +141,12 @@ class agent_RVO(Node) :
                             'landing service not available, waiting again... '
                         )
                     self.landing_services.append(landingService) # type: ignore
+
+        if not self.simu :
+            global emergency
+            emergency = self.create_client(Empty, 'all/emergency')
+            while not emergency.wait_for_service(timeout_sec=1) :
+                self.get_logger().warn("Waiting for emergency service")
 
         self.pos = np.zeros((self.NUM_AGENTS, 3))
         self.angles = np.zeros((self.NUM_AGENTS, 3))
@@ -384,60 +392,63 @@ class agent_RVO(Node) :
 # ──────── Apply RVO ────────────────────────────────────────────────────────────────────────────────
 
     def run_mission(self) :
-        new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel) for idx in range(self.NUM_AGENTS)])
+        try :
+            new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel) for idx in range(self.NUM_AGENTS)])
 
-        if self.simu:
-            for idx, publisher in enumerate(self.twist_publishers):
-                msg = Twist()
-                msg.linear.x = float(new_vel[idx][0])
-                msg.linear.y = float(new_vel[idx][1])
-                msg.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
-                msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
-                publisher.publish(msg)
-                # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
-                self.vel[idx] = new_vel[idx]
-                if self.DIM == 2 :
-                    self.vel[idx][2] = 0
-        else :
-            for idx, publisher in enumerate(self.twist_publishers):
-                if self.dist_goal[idx] < .2 and np.array_equal(new_vel[idx], self.v_opt[idx]) :
-                    x_new = self.goals[idx]
-                else :
-                    MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
-                    dp = new_vel[idx]*self.dt
-                    dp_norm = np.linalg.norm(dp)
-                    if self.cmd_vel :
-                        MINIMAL_SIZE_STEP = .2
-                    if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[idx], self.v_opt[idx]) :
-                        dp = dp/dp_norm * MINIMAL_SIZE_STEP
-                    x_new = self.pos[idx] + dp
-                if idx == self.name_to_index[f"crazyflie6"] :
-                    new_vel[idx][2] = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
-                    x_new[2] = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2])
-                    self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]},\n\t\t pos : {self.pos[idx]},\n\t\t goal : {self.goals[idx]},\n\t\t v_opt : {self.v_opt[idx]};\n\t\t x_new : {x_new} {AnsiColor.RESET}\n", throttle_duration_sec=1)
-                if self.cmd_vel :
-                    msg = FullState()
-                    msg.twist.linear.x = float(new_vel[idx][0])
-                    msg.twist.linear.y = float(new_vel[idx][1])
-                    msg.twist.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
-                    msg.twist.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
-                    msg.pose.position.x = float(x_new[0]) # type: ignore
-                    msg.pose.position.y = float(x_new[1]) # type: ignore
-                    msg.pose.position.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+            if self.simu:
+                for idx, publisher in enumerate(self.twist_publishers):
+                    msg = Twist()
+                    msg.linear.x = float(new_vel[idx][0])
+                    msg.linear.y = float(new_vel[idx][1])
+                    msg.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
+                    msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
                     publisher.publish(msg)
-                else :
-                    req = GoTo.Request()
-                    goal = Point()
-                    goal.x = float(x_new[0]) # type: ignore
-                    goal.y = float(x_new[1]) # type: ignore
-                    goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
-                    req.goal = goal
-                    req.yaw = 0.
-                    self.twist_publishers[idx].call_async(req)
+                    # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
+                    self.vel[idx] = new_vel[idx]
+                    if self.DIM == 2 :
+                        self.vel[idx][2] = 0
+            else :
+                for idx, publisher in enumerate(self.twist_publishers):
+                    if self.dist_goal[idx] < .2 and np.array_equal(new_vel[idx], self.v_opt[idx]) :
+                        x_new = self.goals[idx]
+                    else :
+                        MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
+                        dp = new_vel[idx]*self.dt
+                        dp_norm = np.linalg.norm(dp)
+                        if self.cmd_vel :
+                            MINIMAL_SIZE_STEP = .2
+                        if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[idx], self.v_opt[idx]) :
+                            dp = dp/dp_norm * MINIMAL_SIZE_STEP
+                        x_new = self.pos[idx] + dp
+                    if idx == self.name_to_index[f"crazyflie6"] :
+                        new_vel[idx][2] = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
+                        x_new[2] = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                        self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]},\n\t\t pos : {self.pos[idx]},\n\t\t goal : {self.goals[idx]},\n\t\t v_opt : {self.v_opt[idx]};\n\t\t x_new : {x_new} {AnsiColor.RESET}\n", throttle_duration_sec=1)
+                    if self.cmd_vel :
+                        msg = FullState()
+                        msg.twist.linear.x = float(new_vel[idx][0])
+                        msg.twist.linear.y = float(new_vel[idx][1])
+                        msg.twist.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
+                        msg.twist.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
+                        msg.pose.position.x = float(x_new[0]) # type: ignore
+                        msg.pose.position.y = float(x_new[1]) # type: ignore
+                        msg.pose.position.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                        publisher.publish(msg)
+                    else :
+                        req = GoTo.Request()
+                        goal = Point()
+                        goal.x = float(x_new[0]) # type: ignore
+                        goal.y = float(x_new[1]) # type: ignore
+                        goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                        req.goal = goal
+                        req.yaw = 0.
+                        self.twist_publishers[idx].call_async(req)
 
-                self.vel[idx] = new_vel[idx]
-                if self.DIM == 2 :
-                    self.vel[idx][2] = 0
+                    self.vel[idx] = new_vel[idx]
+                    if self.DIM == 2 :
+                        self.vel[idx][2] = 0
+        except KeyboardInterrupt :
+            pass # No need to close the pool, managed by the signal_handler, it is juste to avoid all the error messages
 
 # ──────── Main loop ──────────────────────────────────────────────────────────────────────────────
 
@@ -517,28 +528,43 @@ def RVO_loc(idx, test_velocities, v_opt, pos, vel) :
 
 def signal_handler(sig, frame):
     print("Shutdown signal received, cleaning up...")
-    rclpy.shutdown()
+    if not agents.simu :
+        empty = Empty.Request()
+        emergency.call_async(empty)
+    agents.destroy_node()
+    if rclpy.utilities.ok() : # type: ignore
+        rclpy.shutdown()
     pool.close()
     pool.join()
     sys.exit(0)
 
+def init_worker():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
 def main(args=None):
     rclpy.init(args=args)
 
+    global agents
     executor = MultiThreadedExecutor(num_threads=4)
     agents = agent_RVO()
 
     global pool
-    pool = Pool(10)
+    pool = Pool(10, init_worker)
 
     executor.add_node(agents)
     try:
         executor.spin()
+    except KeyboardInterrupt :
+        pass # Go to finally to clean, just avoid displaying the error
     finally:
         pool.close()
         pool.join()
+        if not agents.simu :
+            empty = Empty.Request()
+            emergency.call_async(empty)
         agents.destroy_node()
-        rclpy.shutdown()
+        if rclpy.utilities.ok() : # type: ignore
+            rclpy.shutdown()
 
 if __name__ == "__main__":
     main()

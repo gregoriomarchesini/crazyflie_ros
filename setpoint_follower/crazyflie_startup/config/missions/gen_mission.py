@@ -1,10 +1,32 @@
 #!/usr/bin/env python3.10
 
 import numpy as np
+import sys
+import re
 
 NB_BOT = 10
-RADIUS = 2
-PERIOD_SIZE = 25
+RADIUS = .5
+PERIOD_SIZE = 20
+BOTS = []
+if len(sys.argv) > 1 :
+    for arg in sys.argv[1:] :
+        split = re.split(r"[\D]+", arg)
+        if arg.startswith("nb_bot=") :
+            NB_BOT = int(split[1])
+        elif arg.startswith("radius=") :
+            RADIUS = int(split[1])
+        elif arg.startswith("period_size=") :
+            PERIOD_SIZE = int(split[1])
+        else :
+            for bot in  split :
+                if bot.isdigit() :
+                    BOTS.append(int(bot))
+
+if not BOTS :
+    BOTS = [i for i in range(NB_BOT)]
+else :
+    NB_BOT = len(BOTS)
+
 PARAM = [
     "DIM: 2",
     "MANAGER_TIMER: 0.8",
@@ -17,7 +39,7 @@ PARAM = [
 
 POS_Z = .3
 BOT_PARAM = [
-    "radio: 1",
+    "radio: \"0\"",
     "channel: 80"
 ]
 
@@ -35,8 +57,8 @@ with open ("circle.yaml", "w", encoding = "utf-8") as file:
 
     angle = 0
     goals = []
-    for i in range(NB_BOT) :
-        print("  " * nb_tab + "agent_" + str(i) + ":", file = file)
+    for i, bot in enumerate(BOTS) :
+        print("  " * nb_tab + "agent_" + str(bot) + ":", file = file)
         nb_tab += 1
         pos = [RADIUS*np.cos(angle), RADIUS*np.sin(angle), POS_Z]
         angle += 2*np.pi/NB_BOT
@@ -54,19 +76,19 @@ with open ("circle.yaml", "w", encoding = "utf-8") as file:
 
     print("\n" + "  "*nb_tab + "TASKS:", file = file)
     nb_tab += 1
-    angle = 2*np.pi/NB_BOT + np.pi
-    pos_0 = np.array([-RADIUS, 0])
-    for i in range(1, NB_BOT) :
-        print("  " * nb_tab + f"task_{i}:", file = file)
+    angle = np.pi
+    for i, bot in enumerate(BOTS) :
+        print("  " * nb_tab + f"task_{i+1}:", file = file)
         nb_tab+=1
         goal = np.array([RADIUS*np.cos(angle), RADIUS*np.sin(angle)])
         angle += 2*np.pi/NB_BOT
-        pos_rel = [float(d) for d in goal-pos_0]
         print("  "*nb_tab + "period_num: 0", file = file)
-        print("  "*nb_tab + "edges: " + str([0, i]), file = file)
-        print("  "*nb_tab + "rel_position: " + str(pos_rel), file = file)
+        print("  "*nb_tab + "bot: " + str(bot), file = file)
+        print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
         print("  "*nb_tab + "size: 0.2", file = file)
         nb_tab-=1
+
+print("circle.yaml generated")
 
 # A circle and the drones goes to random points on it
 with open ("random.yaml", "w", encoding = "utf-8") as file:
@@ -80,8 +102,8 @@ with open ("random.yaml", "w", encoding = "utf-8") as file:
 
     angle = 0
     goals = []
-    for i in range(NB_BOT) :
-        print("  " * nb_tab + "agent_" + str(i) + ":", file = file)
+    for bot in BOTS :
+        print("  " * nb_tab + "agent_" + str(bot) + ":", file = file)
         nb_tab += 1
         pos = [RADIUS*np.cos(angle), RADIUS*np.sin(angle), POS_Z]
         angle += 2*np.pi/NB_BOT
@@ -99,21 +121,20 @@ with open ("random.yaml", "w", encoding = "utf-8") as file:
 
     print("\n" + "  "*nb_tab + "TASKS:", file = file)
     nb_tab += 1
-    angle = 2*np.pi/NB_BOT + np.pi
     for p in range(NB_PERIOD) :
-        angle = np.random.random() * 2*np.pi
-        pos_0 = np.array([float(RADIUS*np.cos(angle)), float(RADIUS*np.sin(angle))])
-        for i in range(1, NB_BOT) :
-            print("  " * nb_tab + f"task_{p*NB_BOT + i}:", file = file)
+        print("\n" +  "  " * nb_tab + f"# Period {p} \n", file = file)
+        for i, bot in enumerate(BOTS) :
+            print("  " * nb_tab + f"task_{p*NB_BOT + i+1}:", file = file)
             nb_tab+=1
             angle = np.random.random() * 2*np.pi
             goal = np.array([float(RADIUS*np.cos(angle)), float(RADIUS*np.sin(angle))])
-            pos_rel = [float(d) for d in goal-pos_0]
             print("  "*nb_tab + f"period_num: {p}", file = file)
-            print("  "*nb_tab + "edges: " + str([0, i]), file = file)
-            print("  "*nb_tab + "rel_position: " + str(pos_rel), file = file)
+            print("  "*nb_tab + "bot: " + str(bot), file = file)
+            print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
             print("  "*nb_tab + "size: 0.2", file = file)
             nb_tab-=1
+
+print("random.yaml generated")
 
 PARAM = [
     "DIM: 3",
@@ -145,7 +166,7 @@ with open ("sphere.yaml", "w", encoding = "utf-8") as file:
 
     angle = 0
     goals = []
-    for i in range(NB_BOT) :
+    for i in BOTS :
         print("  " * nb_tab + "agent_" + str(i) + ":", file = file)
         nb_tab += 1
         pos = [RADIUS*np.cos(angle), RADIUS*np.sin(angle), POS_Z]
@@ -165,17 +186,18 @@ with open ("sphere.yaml", "w", encoding = "utf-8") as file:
     print("\n" + "  "*nb_tab + "TASKS:", file = file)
     nb_tab += 1
     for p in range(2) :
-        pos_0 = (SPHERE_CENTER + angles_3d[0]) if p%2 else (SPHERE_CENTER - angles_3d[0])
-        for i in range(1, NB_BOT) :
-            print("  " * nb_tab + f"task_{p*NB_BOT + i}:", file = file)
+        print("\n" +  "  " * nb_tab + f"# Period {p} \n", file = file)
+        for i, bot in enumerate(BOTS) :
+            print("  " * nb_tab + f"task_{p*NB_BOT + i+1}:", file = file)
             nb_tab+=1
             goal = (SPHERE_CENTER + angles_3d[i]) if p%2 else (SPHERE_CENTER - angles_3d[i])
-            pos_rel = [float(d) for d in goal-pos_0]
             print("  "*nb_tab + f"period_num: {p}", file = file)
-            print("  "*nb_tab + "edges: " + str([0, i]), file = file)
-            print("  "*nb_tab + "rel_position: " + str(pos_rel), file = file)
+            print("  "*nb_tab + "bot: " + str(bot), file = file)
+            print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
             print("  "*nb_tab + "size: 0.2", file = file)
             nb_tab-=1
+
+print("sphere.yaml generated")
 
 # A sphere and the drones goes to random point on it
 with open ("rsphere.yaml", "w", encoding = "utf-8") as file:
@@ -189,7 +211,7 @@ with open ("rsphere.yaml", "w", encoding = "utf-8") as file:
 
     angle = 0
     goals = []
-    for i in range(NB_BOT) :
+    for i in BOTS :
         print("  " * nb_tab + "agent_" + str(i) + ":", file = file)
         nb_tab += 1
         pos = [RADIUS*np.cos(angle), RADIUS*np.sin(angle), POS_Z]
@@ -209,20 +231,60 @@ with open ("rsphere.yaml", "w", encoding = "utf-8") as file:
     print("\n" + "  "*nb_tab + "TASKS:", file = file)
     nb_tab += 1
     for p in range(NB_PERIOD) :
-        phi = np.random.random()*np.pi - np.pi/2
-        theta = np.random.random()*2*np.pi
-        pos = RADIUS * np.array((np.cos(phi)*np.cos(theta), np.cos(phi)*np.sin(theta), np.sin(phi)))
-        pos_0 = (SPHERE_CENTER + angles_3d[0]) if p==0 else (SPHERE_CENTER + pos)
-        for i in range(1, NB_BOT) :
+        print("\n" +  "  " * nb_tab + f"# Period {p} \n", file = file)
+        for i,bot in enumerate(BOTS) :
             print("  " * nb_tab + f"task_{p*NB_BOT + i}:", file = file)
             nb_tab+=1
             phi = np.random.random()*np.pi - np.pi/2
             theta = np.random.random()*2*np.pi
             pos = RADIUS * np.array((np.cos(phi)*np.cos(theta), np.cos(phi)*np.sin(theta), np.sin(phi)))
             goal = SPHERE_CENTER + pos
-            pos_rel = [float(d) for d in goal-pos_0]
             print("  "*nb_tab + f"period_num: {p}", file = file)
-            print("  "*nb_tab + "edges: " + str([0, i]), file = file)
-            print("  "*nb_tab + "rel_position: " + str(pos_rel), file = file)
+            print("  "*nb_tab + "bot: " + str(bot), file = file)
+            print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
             print("  "*nb_tab + "size: 0.2", file = file)
             nb_tab-=1
+
+print("rsphere.yaml generated")
+
+with open ("test_real.yaml", "w", encoding = "utf-8") as file:
+    print("/**:", file = file)
+    print("  ros__parameters:", file = file)
+    nb_tab = 2
+    for param in PARAM :
+        print("  "*nb_tab + param, file = file)
+    
+    print("", file = file)
+
+    goals = []
+    for i, bot in enumerate(BOTS) :
+        print("  " * nb_tab + "agent_" + str(bot) + ":", file = file)
+        nb_tab += 1
+        pos = [0.5, -1*(i%2) + RADIUS*((i+1)//2), POS_Z]
+        pos = [float(p) for p in pos]
+        print("  "*nb_tab + "pos: " + str(pos), file = file)
+        for p in BOT_PARAM :
+            print("  "*nb_tab + p, file = file)
+        nb_tab -= 1
+
+    print("\n" + "  "*nb_tab + "PERIODS:", file = file)
+    nb_tab+= 1
+    for i in range(1, 3) :
+        print("  "*nb_tab + "period_" + str(i-1) + ": " + str([PERIOD_SIZE*i-5, PERIOD_SIZE*i]), file = file)
+    nb_tab -= 1
+
+    print("\n" + "  "*nb_tab + "TASKS:", file = file)
+    nb_tab += 1
+    for p in range(2) :
+        print("\n" +  "  " * nb_tab + f"# Period {p} \n", file = file)
+        for i,bot in enumerate(BOTS) :
+            print("  " * nb_tab + f"task_{p*NB_BOT + i}:", file = file)
+            nb_tab+=1
+            goal = [-0.5 if p == 0 else 0.5, -1*(i%2) + RADIUS*((i+1)//2)]
+            print("  "*nb_tab + f"period_num: {0}", file = file)
+            print("  "*nb_tab + "bot: " + str(bot), file = file)
+            print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
+            print("  "*nb_tab + "size: 0.2", file = file)
+            nb_tab-=1
+
+print("test_real.yaml generated")

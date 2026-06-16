@@ -444,7 +444,8 @@ class Manager(Node) :
 
 def signal_handler(sig, frame):
     print("Shutdown signal received, cleaning up...")
-    rclpy.shutdown()
+    if (rclpy.utilities.ok()) : # type: ignore
+        rclpy.shutdown()
     sys.exit(0)
 
 
@@ -458,7 +459,8 @@ def main(args=None):
 
     rclpy.spin(manager)
     manager.destroy_node()
-    rclpy.shutdown()
+    if rclpy.utilities.ok() : # type: ignore
+        rclpy.shutdown()
 
 if __name__ == "__main__":
     main()
