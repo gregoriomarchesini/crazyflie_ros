@@ -420,10 +420,10 @@ class agent_RVO(Node) :
                         if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[idx], self.v_opt[idx]) :
                             dp = dp/dp_norm * MINIMAL_SIZE_STEP
                         x_new = self.pos[idx] + dp
-                    if idx == self.name_to_index[f"crazyflie6"] :
-                        new_vel[idx][2] = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
-                        x_new[2] = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
-                        self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]},\n\t\t pos : {self.pos[idx]},\n\t\t goal : {self.goals[idx]},\n\t\t v_opt : {self.v_opt[idx]};\n\t\t x_new : {x_new} {AnsiColor.RESET}\n", throttle_duration_sec=1)
+                    # if idx == self.name_to_index[f"crazyflie9"] :
+                    #     new_vel[idx][2] = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
+                    #     x_new[2] = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                    #     self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]},\n\t\t pos : {self.pos[idx]},\n\t\t goal : {self.goals[idx]},\n\t\t v_opt : {self.v_opt[idx]};\n\t\t x_new : {x_new} {AnsiColor.RESET}\n", throttle_duration_sec=1)
                     if self.cmd_vel :
                         msg = FullState()
                         msg.twist.linear.x = float(new_vel[idx][0])
