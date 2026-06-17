@@ -273,8 +273,7 @@ class agent_RVO(Node) :
             if goal.has_one :
                 self.goals[self.name_to_index[name]] = np.array((goal.pos.x, goal.pos.y, goal.pos.z)) # type: ignore
                 if self.DIM == 2 :
-                    if self.simu :
-                        self.goals[self.name_to_index[name]][2] = self.hoover_heights[self.name_to_index[name]] # type: ignore
+                    self.goals[self.name_to_index[name]][2] = self.hoover_heights[self.name_to_index[name]] # type: ignore
             else :
                 self.goals[self.name_to_index[name]] = None
 
@@ -410,9 +409,11 @@ class agent_RVO(Node) :
                         self.vel[idx][2] = 0
             else :
                 for idx, publisher in enumerate(self.twist_publishers):
+                    vel_norm = np.linalg.norm(new_vel[idx])
                     if self.dist_goal[idx] < .2 and np.array_equal(new_vel[idx], self.v_opt[idx]) :
                         x_new = self.goals[idx]
                         if not self.cmd_vel and not self.stabilized[idx] :
+                            # self.get_logger().info(f"{AnsiColor.VIOLET} Stabilizing the drone {AnsiColor.RESET}")
                             req = GoTo.Request()
                             goal = Point()
                             goal.x = float(x_new[0]) # type: ignore
@@ -420,17 +421,24 @@ class agent_RVO(Node) :
                             goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                             req.goal = goal
                             req.yaw = 0.
+                            duration = np.linalg.norm(x_new-self.pos[idx])/vel_norm if vel_norm != 0 else 0
+                            duration = max(duration, 1)
+                            req.duration.sec = int(duration)
+                            req.duration.nanosec = int((duration%1)*1e9)
                             self.twist_publishers[idx].call_async(req)
                             self.stabilized[idx] = True
                     else :
                         self.stabilized[idx] = False
+                        # self.get_logger().info(f"{AnsiColor.VIOLET} dist to goal : {self.dist_goal[idx]}, pos : {self.pos[idx]} , goal {self.goals[idx]} :  {AnsiColor.RESET}")
                         MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
+                        # MINIMAL_SIZE_STEP = 1/vel_norm if vel_norm != 0 else 0
                         dp = new_vel[idx]*self.dt
                         dp_norm = np.linalg.norm(dp)
                         if self.cmd_vel :
                             MINIMAL_SIZE_STEP = .2
                         if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[idx], self.v_opt[idx]) :
                             dp = dp/dp_norm * MINIMAL_SIZE_STEP
+                            dp_norm = MINIMAL_SIZE_STEP
                         x_new = self.pos[idx] + dp
                     # if idx == self.name_to_index[f"crazyflie9"] :
                     #     new_vel[idx][2] = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
@@ -454,9 +462,11 @@ class agent_RVO(Node) :
                         goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                         req.goal = goal
                         req.yaw = 0.
-                        duration = dp_norm/np.linalg.norm(new_vel[idx]) # type: ignore
-                        req.duration.sec = int(duration)
-                        req.duration.nanosec = int((duration%1)*1e9)
+                        # duration = dp_norm/vel_norm if vel_norm != 0 else 0 # type: ignore
+                        # duration = max(duration, 1)
+                        # req.duration.sec = int(duration)
+                        # req.duration.nanosec = int((duration%1)*1e9)
+                        # self.get_logger().info(f"{AnsiColor.VIOLET} duration : {duration} {AnsiColor.RESET}")
                         self.twist_publishers[idx].call_async(req)
 
                     self.vel[idx] = new_vel[idx]

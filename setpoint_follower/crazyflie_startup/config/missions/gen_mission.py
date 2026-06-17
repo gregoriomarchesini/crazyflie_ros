@@ -149,7 +149,7 @@ with open ("test_real.yaml", "w", encoding = "utf-8") as file:
     for i, bot in enumerate(BOTS) :
         print("  " * nb_tab + "agent_" + str(bot) + ":", file = file)
         nb_tab += 1
-        pos = [0.5, -1*(i%2) + RADIUS*((i+1)//2), POS_Z]
+        pos = [0.5, (1-2*(i%2)) * RADIUS*((i+1)//2), POS_Z]
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
         for p in BOT_PARAM :
@@ -169,7 +169,7 @@ with open ("test_real.yaml", "w", encoding = "utf-8") as file:
         for i,bot in enumerate(BOTS) :
             print("  " * nb_tab + f"task_{p*NB_BOT + i}:", file = file)
             nb_tab+=1
-            goal = [-0.5 if p == 0 else 0.5, -1*(i%2) + RADIUS*((i+1)//2)]
+            goal = [-0.5 if p == 0 else 0.5, (1-2*(i%2)) * RADIUS*((i+1)//2)]
             print("  "*nb_tab + f"period_num: {p}", file = file)
             print("  "*nb_tab + "bot: " + str(bot), file = file)
             print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
