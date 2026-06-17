@@ -169,6 +169,7 @@ class agent_RVO(Node) :
         self.called_landing = False
         self.start_landing_time = None
         self.start_mission_time = None
+        self.stabilized = [False for _ in range(self.NUM_AGENTS)]
 
         self.land_pose = None
         self.time_to_take_off = 3.
@@ -411,7 +412,18 @@ class agent_RVO(Node) :
                 for idx, publisher in enumerate(self.twist_publishers):
                     if self.dist_goal[idx] < .2 and np.array_equal(new_vel[idx], self.v_opt[idx]) :
                         x_new = self.goals[idx]
+                        if not self.cmd_vel and not self.stabilized[idx] :
+                            req = GoTo.Request()
+                            goal = Point()
+                            goal.x = float(x_new[0]) # type: ignore
+                            goal.y = float(x_new[1]) # type: ignore
+                            goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                            req.goal = goal
+                            req.yaw = 0.
+                            self.twist_publishers[idx].call_async(req)
+                            self.stabilized[idx] = True
                     else :
+                        self.stabilized[idx] = False
                         MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
                         dp = new_vel[idx]*self.dt
                         dp_norm = np.linalg.norm(dp)
@@ -434,7 +446,7 @@ class agent_RVO(Node) :
                         msg.pose.position.y = float(x_new[1]) # type: ignore
                         msg.pose.position.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                         publisher.publish(msg)
-                    else :
+                    elif not self.stabilized[idx] :
                         req = GoTo.Request()
                         goal = Point()
                         goal.x = float(x_new[0]) # type: ignore
@@ -442,6 +454,9 @@ class agent_RVO(Node) :
                         goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                         req.goal = goal
                         req.yaw = 0.
+                        duration = dp_norm/np.linalg.norm(new_vel[idx]) # type: ignore
+                        req.duration.sec = int(duration)
+                        req.duration.nanosec = int((duration%1)*1e9)
                         self.twist_publishers[idx].call_async(req)
 
                     self.vel[idx] = new_vel[idx]
@@ -505,7 +520,7 @@ def is_in_vo(idx, other_idx, v_test, pos) :
     elif lambda_ > TAU * v_norm :
         lambda_ = TAU*v_norm
     if (np.linalg.norm(dp-lambda_*v) <= 2*RADIUS + MARGIN) :
-        if lambda_ <= .1*v_norm :
+        if lambda_ <= agents.dt*v_norm :
             if dp@v > 0 :
                 return np.inf
             return 0
