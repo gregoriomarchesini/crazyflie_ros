@@ -175,13 +175,13 @@ class agent_RVO(Node) :
         self.time_to_take_off = 3.
 
         self.test_velocities = []
-        magnitude = (1, 2/3, 1/3)
+        self.magnitudes = (1, 2/3, 1/3)
         nb_sample = 24
         if self.DIM == 2 :
             angles = ((np.cos(2*i*np.pi/nb_sample), np.sin(2*i*np.pi/nb_sample), 0) for i in range(nb_sample))
             self.test_velocities.append(np.array((0, 0, 0)))
             for a in angles :
-                for m in magnitude :
+                for m in self.magnitudes :
                     self.test_velocities.append(self.SPEED * m * np.array(a)) # type: ignore
         elif self.DIM == 3 :
             golden_ratio = (1+np.sqrt(5))/2
@@ -189,7 +189,7 @@ class agent_RVO(Node) :
                 theta = 2*np.pi*i*golden_ratio
                 phi = np.arccos(1-2*i/nb_sample)
                 v = np.array((np.cos(theta)*np.sin(phi), np.sin(phi)*np.sin(theta), np.cos(phi)))
-                for m in magnitude :
+                for m in self.magnitudes :
                     self.test_velocities.append(m*v)
         self.min_dist = np.inf
 
@@ -431,8 +431,8 @@ class agent_RVO(Node) :
                         self.stabilized[idx] = False
                         # self.get_logger().info(f"{AnsiColor.VIOLET} dist to goal : {self.dist_goal[idx]}, pos : {self.pos[idx]} , goal {self.goals[idx]} :  {AnsiColor.RESET}")
                         MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
-                        # MINIMAL_SIZE_STEP = 1/vel_norm if vel_norm != 0 else 0
-                        dp = new_vel[idx]*self.dt
+                        # MINIMAL_SIZE_STEP = vel_norm
+                        dp = new_vel[idx]
                         dp_norm = np.linalg.norm(dp)
                         if self.cmd_vel :
                             MINIMAL_SIZE_STEP = .2
@@ -462,10 +462,10 @@ class agent_RVO(Node) :
                         goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                         req.goal = goal
                         req.yaw = 0.
-                        # duration = dp_norm/vel_norm if vel_norm != 0 else 0 # type: ignore
-                        # duration = max(duration, 1)
-                        # req.duration.sec = int(duration)
-                        # req.duration.nanosec = int((duration%1)*1e9)
+                        duration = dp_norm/vel_norm if vel_norm != 0 else 0 # type: ignore
+                        duration = max(duration, 1)
+                        req.duration.sec = int(duration)
+                        req.duration.nanosec = int((duration%1)*1e9)
                         # self.get_logger().info(f"{AnsiColor.VIOLET} duration : {duration} {AnsiColor.RESET}")
                         self.twist_publishers[idx].call_async(req)
 
@@ -530,7 +530,7 @@ def is_in_vo(idx, other_idx, v_test, pos) :
     elif lambda_ > TAU * v_norm :
         lambda_ = TAU*v_norm
     if (np.linalg.norm(dp-lambda_*v) <= 2*RADIUS + MARGIN) :
-        if lambda_ <= agents.dt*v_norm :
+        if lambda_ <= v_norm :
             if dp@v > 0 :
                 return np.inf
             return 0
