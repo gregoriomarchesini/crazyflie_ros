@@ -4,11 +4,21 @@ touch $MAKEFILE_DIR/Makefile
 cat > $MAKEFILE_DIR/Makefile << "EOF"
 SHELL := /bin/bash
 
+MISSION_PATH = src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions
 args := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-map = $(filter %.yaml, $(args))
+var := $(wordlist 1,$(words $(MAKEOVERRIDES)),$(MAKEOVERRIDES))
+missions := $(patsubst $(MISSION_PATH)/%, %, $(wildcard $(MISSION_PATH)/*.yaml))
+mission_names = $(filter $(missions), $(patsubst %, %.yaml, $(args)))
+map = $(filter $(missions), $(args))$(mission_names)
+
 ifeq ($(map), )
-#	By default, we run on the map test_real.yaml
-	map = test_real.yaml
+	backend := cflib
+else
+	ifneq ($(shell grep "\"\*\"" $(MISSION_PATH)/$(firstword $(map))), )
+		backend := cpp
+	else
+		backend := cflib
+	endif
 endif
 
 COLCON_STAMP := .colcon.stamp
@@ -24,20 +34,31 @@ compile : $(COLCON_STAMP)
 
 simu : compile
 # 	Each command is run independantly so we need to source and launch ros2 at the same time
-	@ source install/setup.bash && ros2 launch crazyflie_ros2_setpoint_follower rvo.launch.py mission_yaml:=$(map) backend:=sim
+	@ for mission in $(map); do\
+		source install/setup.bash && ros2 launch crazyflie_ros2_setpoint_follower rvo.launch.py mission_yaml:=$$mission backend:=sim;\
+	done
 
 real_launcher :
 	@ source install/setup.bash && ros2 launch crazyflie_ros2_setpoint_follower rvo.launch.py mission_yaml:=$(map) backend:=hardware
 
 real_hardware :
 #	sleep to be sure that this one is launched after the other one
-	@ gnome-terminal -- bash -c 'sleep 3; source /opt/ros/humble/setup.bash; source install/setup.bash; ros2 launch crazyflie_ros2_setpoint_follower launch_cf_hardware.launch.py; exit'
+	@ gnome-terminal -- bash -c 'echo "backend : $(backend)"; sleep 3; source /opt/ros/humble/setup.bash; source install/setup.bash; ros2 launch crazyflie_ros2_setpoint_follower launch_cf_hardware.launch.py backend:=$(backend); exit'
 
 real : compile
-	@ $(MAKE) -j 2 real_launcher real_hardware $(map)
+	@ for mission in $(map); do\
+		$(MAKE) -j 2 real_launcher real_hardware $$mission;\
+	done
+
+generate :
+	@ ./src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/gen_mission.py $(var) $(args)
 
 %::
 	@true
 EOF
 
 echo "Makefile generated"
+
+chmod u+x $MAKEFILE_DIR/src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/gen_mission.py
+
+echo "Made gen_mission.py executable

@@ -3,24 +3,61 @@
 import numpy as np
 import sys
 import re
+import os
+
+rel_path = os.path.dirname(os.path.relpath(__file__))
+abs_path = os.path.dirname(os.path.abspath(__file__))
 
 NB_BOT = 10
 RADIUS = .5
 PERIOD_SIZE = 20
+DEFAULT_CHANNEL = "\"80\""
+DEFAULT_RADIO = "\"0\""
 BOTS = []
+CPP = False
+seen_index = set()
+
 if len(sys.argv) > 1 :
-    for arg in sys.argv[1:] :
-        split = re.split(r"[\D]+", arg)
+    for i, arg in enumerate(sys.argv[1:]) :
+        if arg.startswith("default_channel=") :
+            DEFAULT_CHANNEL = "\"" + re.split(r"[\D]+", arg)[1] + "\""
+            seen_index.add(i)
+        if arg.startswith("default_radio=") :
+            seen_index.add(i)
+            if not CPP :
+                DEFAULT_RADIO = "\"" + re.split(r"[\D]+", arg)[1] + "\""
+        if arg == "cpp" :
+            seen_index.add(i)
+            CPP = True
+            DEFAULT_RADIO = "\"*\""
+
+bot_channel = {}
+bot_radio = {}
+
+if len(sys.argv) > 1 :
+    for i, arg in enumerate(sys.argv[1:]) :
         if arg.startswith("nb_bot=") :
-            NB_BOT = int(split[1])
+            NB_BOT = int(re.split(r"[^\d:]+", arg)[1])
         elif arg.startswith("radius=") :
-            RADIUS = int(split[1])
+            RADIUS = int(re.split(r"[^\d:]+", arg)[1])
         elif arg.startswith("period_size=") :
-            PERIOD_SIZE = int(split[1])
-        else :
-            for bot in  split :
-                if bot.isdigit() :
-                    BOTS.append(int(bot))
+            PERIOD_SIZE = int(re.split(r"[^\d:]+", arg)[1])
+        elif re.fullmatch(r"\d+:?\d*:?\d*", arg) :
+            split = re.split(r":", arg)
+            for idx, value in enumerate(re.split(r":", arg)) :
+                match idx :
+                    case 0 :
+                        BOTS.append(int(value))
+                    case 1 :
+                        bot_channel[BOTS[-1]] = "\"" + value + "\"" if value else DEFAULT_CHANNEL
+                    case 2 :
+                        bot_radio[BOTS[-1]] = "\"" + value + "\"" if value and not CPP else DEFAULT_RADIO
+            if len(split) < 2 :
+                bot_channel[BOTS[-1]] = DEFAULT_CHANNEL
+            if len(split) < 3 :
+                bot_radio[BOTS[-1]] = DEFAULT_RADIO
+        elif not i in seen_index :
+            raise ValueError(f"The arg {arg} is not recognised")
 
 if not BOTS :
     BOTS = [i for i in range(NB_BOT)]
@@ -31,22 +68,18 @@ PARAM = [
     "DIM: 2",
     "MANAGER_TIMER: 0.8",
     "AGENT_TIMER: 0.05",
-    "SPEED: 0.4",
+    "SPEED: 0.1",
     "BOX_WEIGHT: 10",
     "COMM_DISTANCE: 3.",
     "HOOVERING_HEIGHT: 1."
 ]
 
 POS_Z = .3
-BOT_PARAM = [
-    "radio: \"0\"",
-    "channel: 80"
-]
 
 NB_PERIOD = 5
 
 # A circle and the drones cross it
-with open ("circle.yaml", "w", encoding = "utf-8") as file:
+with open (f"{abs_path}/circle.yaml", "w", encoding = "utf-8") as file:
     print("/**:", file = file)
     print("  ros__parameters:", file = file)
     nb_tab = 2
@@ -64,8 +97,8 @@ with open ("circle.yaml", "w", encoding = "utf-8") as file:
         angle += 2*np.pi/NB_BOT
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
-        for p in BOT_PARAM :
-            print("  "*nb_tab + p, file = file)
+        print("  "*nb_tab + "radio: " + bot_radio[bot], file = file)
+        print("  "*nb_tab + "channel: " + bot_channel[bot], file = file)
         nb_tab -= 1
 
     print("\n" + "  "*nb_tab + "PERIODS:", file = file)
@@ -91,7 +124,7 @@ with open ("circle.yaml", "w", encoding = "utf-8") as file:
 print("circle.yaml generated")
 
 # A circle and the drones goes to random points on it
-with open ("random.yaml", "w", encoding = "utf-8") as file:
+with open (f"{abs_path}/random.yaml", "w", encoding = "utf-8") as file:
     print("/**:", file = file)
     print("  ros__parameters:", file = file)
     nb_tab = 2
@@ -109,8 +142,8 @@ with open ("random.yaml", "w", encoding = "utf-8") as file:
         angle += 2*np.pi/NB_BOT
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
-        for p in BOT_PARAM :
-            print("  "*nb_tab + p, file = file)
+        print("  "*nb_tab + "radio: " + bot_radio[bot], file = file)
+        print("  "*nb_tab + "channel: " + bot_channel[bot], file = file)
         nb_tab -= 1
 
     print("\n" + "  "*nb_tab + "PERIODS:", file = file)
@@ -136,7 +169,7 @@ with open ("random.yaml", "w", encoding = "utf-8") as file:
 
 print("random.yaml generated")
 
-with open ("test_real.yaml", "w", encoding = "utf-8") as file:
+with open (f"{abs_path}/test_real.yaml", "w", encoding = "utf-8") as file:
     print("/**:", file = file)
     print("  ros__parameters:", file = file)
     nb_tab = 2
@@ -152,8 +185,8 @@ with open ("test_real.yaml", "w", encoding = "utf-8") as file:
         pos = [0.5, (1-2*(i%2)) * RADIUS*((i+1)//2), POS_Z]
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
-        for p in BOT_PARAM :
-            print("  "*nb_tab + p, file = file)
+        print("  "*nb_tab + "radio: " + bot_radio[bot], file = file)
+        print("  "*nb_tab + "channel: " + bot_channel[bot], file = file)
         nb_tab -= 1
 
     print("\n" + "  "*nb_tab + "PERIODS:", file = file)
@@ -182,7 +215,7 @@ PARAM = [
     "DIM: 3",
     "MANAGER_TIMER: 0.8",
     "AGENT_TIMER: 0.05",
-    "SPEED: 0.4",
+    "SPEED: 0.1",
     "BOX_WEIGHT: 10",
     "COMM_DISTANCE: 3.",
     "HOOVERING_HEIGHT: 1."
@@ -197,7 +230,7 @@ for i in range(NB_BOT) :
 SPHERE_CENTER = np.array((0, 0, RADIUS+1))
 
 # A sphere and the drones cross it
-with open ("sphere.yaml", "w", encoding = "utf-8") as file:
+with open (f"{abs_path}/sphere.yaml", "w", encoding = "utf-8") as file:
     print("/**:", file = file)
     print("  ros__parameters:", file = file)
     nb_tab = 2
@@ -215,8 +248,8 @@ with open ("sphere.yaml", "w", encoding = "utf-8") as file:
         angle += 2*np.pi/NB_BOT
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
-        for p in BOT_PARAM :
-            print("  "*nb_tab + p, file = file)
+        print("  "*nb_tab + "radio: " + bot_radio[i], file = file)
+        print("  "*nb_tab + "channel: " + bot_channel[i], file = file)
         nb_tab -= 1
 
     print("\n" + "  "*nb_tab + "PERIODS:", file = file)
@@ -242,7 +275,7 @@ with open ("sphere.yaml", "w", encoding = "utf-8") as file:
 print("sphere.yaml generated")
 
 # A sphere and the drones goes to random point on it
-with open ("rsphere.yaml", "w", encoding = "utf-8") as file:
+with open (f"{abs_path}/rsphere.yaml", "w", encoding = "utf-8") as file:
     print("/**:", file = file)
     print("  ros__parameters:", file = file)
     nb_tab = 2
@@ -260,8 +293,8 @@ with open ("rsphere.yaml", "w", encoding = "utf-8") as file:
         angle += 2*np.pi/NB_BOT
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
-        for p in BOT_PARAM :
-            print("  "*nb_tab + p, file = file)
+        print("  "*nb_tab + "radio: " + bot_radio[i], file = file)
+        print("  "*nb_tab + "channel: " + bot_channel[i], file = file)
         nb_tab -= 1
 
     print("\n" + "  "*nb_tab + "PERIODS:", file = file)
@@ -288,3 +321,4 @@ with open ("rsphere.yaml", "w", encoding = "utf-8") as file:
             nb_tab-=1
 
 print("rsphere.yaml generated")
+print(f"see folder {rel_path} :)")

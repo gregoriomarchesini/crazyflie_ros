@@ -1,16 +1,18 @@
 import os
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration
+from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
     # Replace this path with your actual package path if needed
 
-
     crazylie_setpoint_dir = get_package_share_directory('crazyflie_ros2_setpoint_follower')
     crazyswarm_pkg_path = get_package_share_directory('crazyflie')
+
+    backend = DeclareLaunchArgument('backend', default_value='cpp', choices=['cflib', 'cpp'])
 
     crazyflie_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -36,8 +38,8 @@ def generate_launch_description():
 
             "teleop":"false",
             "gui": "false",
-            "backend": "cflib",
+            "backend" : LaunchConfiguration('backend')
         }.items()
     )
 
-    return LaunchDescription([crazyflie_launch])
+    return LaunchDescription([backend, crazyflie_launch])
