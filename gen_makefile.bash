@@ -61,4 +61,4 @@ echo "Makefile generated"
 
 chmod u+x $MAKEFILE_DIR/src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/gen_mission.py
 
-echo "Made gen_mission.py executable
+echo "Made gen_mission.py executable"

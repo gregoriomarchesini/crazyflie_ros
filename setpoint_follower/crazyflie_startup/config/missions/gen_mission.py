@@ -93,8 +93,7 @@ with open (f"{abs_path}/circle.yaml", "w", encoding = "utf-8") as file:
     for i, bot in enumerate(BOTS) :
         print("  " * nb_tab + "agent_" + str(bot) + ":", file = file)
         nb_tab += 1
-        pos = [RADIUS*np.cos(angle), RADIUS*np.sin(angle), POS_Z]
-        angle += 2*np.pi/NB_BOT
+        pos = [0.5, (1-2*(i%2)) * RADIUS*((i+1)//2), POS_Z]
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
         print("  "*nb_tab + "radio: " + bot_radio[bot], file = file)
@@ -103,23 +102,28 @@ with open (f"{abs_path}/circle.yaml", "w", encoding = "utf-8") as file:
 
     print("\n" + "  "*nb_tab + "PERIODS:", file = file)
     nb_tab+= 1
-    for i in range(1, 2) :
+    for i in range(1, 4) :
         print("  "*nb_tab + "period_" + str(i-1) + ": " + str([PERIOD_SIZE*i-5, PERIOD_SIZE*i]), file = file)
     nb_tab -= 1
 
     print("\n" + "  "*nb_tab + "TASKS:", file = file)
     nb_tab += 1
-    angle = np.pi
-    for i, bot in enumerate(BOTS) :
-        print("  " * nb_tab + f"task_{i+1}:", file = file)
-        nb_tab+=1
-        goal = np.array([RADIUS*np.cos(angle), RADIUS*np.sin(angle)])
-        angle += 2*np.pi/NB_BOT
-        print("  "*nb_tab + "period_num: 0", file = file)
-        print("  "*nb_tab + "bot: " + str(bot), file = file)
-        print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
-        print("  "*nb_tab + "size: 0.2", file = file)
-        nb_tab-=1
+    for p in range(3) :
+        print("\n" +  "  " * nb_tab + f"# Period {p} \n", file = file)
+        angle = np.pi*(p%2)
+        for i, bot in enumerate(BOTS) :
+            if p == 2 :
+                goal = [0.5, (1-2*(i%2)) * RADIUS*((i+1)//2)]
+            else :
+                goal = np.array([RADIUS*np.cos(angle), RADIUS*np.sin(angle)])
+                angle += 2*np.pi/NB_BOT
+            print("  " * nb_tab + f"task_{p*NB_BOT + i+1}:", file = file)
+            nb_tab+=1
+            print("  "*nb_tab + f"period_num: {p}", file = file)
+            print("  "*nb_tab + "bot: " + str(bot), file = file)
+            print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
+            print("  "*nb_tab + "size: 0.2", file = file)
+            nb_tab-=1
 
 print("circle.yaml generated")
 
