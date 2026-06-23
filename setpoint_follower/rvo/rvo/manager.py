@@ -264,6 +264,7 @@ class Manager(Node) :
                     known_pos[k] = v - c
 
                 # # # Place the drones by solving a minimization pb
+                # TODO : to be updated for goal missions
                 # constraints = []
                 # x0 = [known_pos[moving_bots[0]][0], known_pos[moving_bots[0]][1]] if self.DIM == 2 else [known_pos[moving_bots[0]][0], known_pos[moving_bots[0]][1], known_pos[moving_bots[0]][2]]
                 # for i in range(1, len(moving_bots)) :

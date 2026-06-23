@@ -195,11 +195,13 @@ class Manager(Node) :
                 if task.timespan[1] > self.recalc_times[0] :
                     break
                 if task.is_goal :
+                    self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, bot : {task.bot}, goal : {task.goal} {AnsiColor.RESET}")
                     fixed_goals = True
                     known_pos[task.bot] = task.goal
+                    self.tasks.pop()
                 elif fixed_goals :
                     edge = [self.AGENTS_INDICES[e] for e in task.edges] # type: ignore
-                    self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, edge : {[self.AGENTS_INDICES[e] for e in task.edges]}, rel_pos : {task.rel_position} {AnsiColor.RESET}") # type: ignore
+                    # self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, edge : {[self.AGENTS_INDICES[e] for e in task.edges]}, rel_pos : {task.rel_position} {AnsiColor.RESET}") # type: ignore
                     if edge[0] in known_pos.keys() and edge[1] in known_pos.keys():
                         if not np.array_equal(known_pos[edge[1]] - known_pos[edge[0]], np.array(task.rel_position)) :
                             self.get_logger().info(f"{AnsiColor.YELLOW} known_pos : {known_pos} {AnsiColor.RESET}")
@@ -224,20 +226,23 @@ class Manager(Node) :
                 for task in waiting_task :
                     edge = [self.AGENTS_INDICES[e] for e in task.edges] # type: ignore
                     if len(known_pos) == 0 :
+                        # self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, edge : {[self.AGENTS_INDICES[e] for e in task.edges]}, rel_pos : {task.rel_position} {AnsiColor.RESET}") # type: ignore
                         known_pos[edge[0]] = np.array((0, 0)) if self.DIM == 2 else np.array((0, 0, 0))
                         known_pos[edge[1]] = np.array(task.rel_position)
                         moving_bots.append(edge[0])
                         moving_bots.append(edge[1])
-                    if edge[0] in known_pos.keys() and edge[1] in known_pos.keys():
+                    elif edge[0] in known_pos.keys() and edge[1] in known_pos.keys():
                         if not np.array_equal(known_pos[edge[1]] - known_pos[edge[0]], np.array(task.rel_position)) :
                             self.get_logger().info(f"{AnsiColor.YELLOW} known_pos : {known_pos} {AnsiColor.RESET}")
                             self.get_logger().error(f"{AnsiColor.RED} error : the tasks are not feasible {AnsiColor.RESET}")
                             self.landing_command_pub.publish(Bool(data=True))
                             return
                     elif edge[0] in known_pos.keys() :
+                        # self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, edge : {[self.AGENTS_INDICES[e] for e in task.edges]}, rel_pos : {task.rel_position} {AnsiColor.RESET}") # type: ignore
                         known_pos[edge[1]] = known_pos[edge[0]] + np.array(task.rel_position)
                         moving_bots.append(edge[1])
                     elif edge[1] in known_pos.keys() :
+                        # self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, edge : {[self.AGENTS_INDICES[e] for e in task.edges]}, rel_pos : {task.rel_position} {AnsiColor.RESET}") # type: ignore
                         known_pos[edge[0]] = known_pos[edge[1]] - np.array(task.rel_position)
                         moving_bots.append(edge[0])
                     else :
@@ -266,6 +271,7 @@ class Manager(Node) :
                     known_pos[k] = v - c
 
                 # # # Place the drones by solving a minimization pb
+                # TODO : to be updated for goal missions
                 # constraints = []
                 # x0 = [known_pos[moving_bots[0]][0], known_pos[moving_bots[0]][1]] if self.DIM == 2 else [known_pos[moving_bots[0]][0], known_pos[moving_bots[0]][1], known_pos[moving_bots[0]][2]]
                 # for i in range(1, len(moving_bots)) :
@@ -395,7 +401,6 @@ class Manager(Node) :
         for name, data in tasks_by_name.items():
             # remap edges to to the agent indices. Agents in the algorithm go from 1 to n
             # but user might decide different indices in the hardware setup 
-            
             if 'goal' in data :
                 tasks.append(Task(
                     timespan = periods[data["period_num"]],
@@ -456,7 +461,8 @@ class Manager(Node) :
 
 def signal_handler(sig, frame):
     print("Shutdown signal received, cleaning up...")
-    rclpy.shutdown()
+    if (rclpy.utilities.ok()) : # type: ignore
+        rclpy.shutdown()
     sys.exit(0)
 
 
@@ -470,7 +476,8 @@ def main(args=None):
 
     rclpy.spin(manager)
     manager.destroy_node()
-    rclpy.shutdown()
+    if rclpy.utilities.ok() : # type: ignore
+        rclpy.shutdown()
 
 if __name__ == "__main__":
     main()

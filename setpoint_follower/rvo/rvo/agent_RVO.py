@@ -214,30 +214,17 @@ class agent_RVO(Node) :
                 self.timer = self.create_timer(self.AGENT_TIMER, self.RVO_callback, callback_group= self.rvo_cb_group) # type: ignore
 
     def odom_callback(self, msg, idx):
-        if type(msg) == Odometry:
-            self.pos[idx, 0] = msg.pose.pose.position.x
-            self.pos[idx, 1] = msg.pose.pose.position.y
-            self.pos[idx, 2] = msg.pose.pose.position.z
+        self.pos[idx, 0] = msg.pose.pose.position.x
+        self.pos[idx, 1] = msg.pose.pose.position.y
+        self.pos[idx, 2] = msg.pose.pose.position.z
 
-            dir = self.goals[idx]-self.pos[idx] if self.goals[idx] is not None else np.array((0, 0, 0))
-            dir_norm = np.linalg.norm(dir)
-            self.v_opt[idx] = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
-            if self.DIM == 2 :
-                self.v_opt[idx][2] = 0
+        dir = self.goals[idx]-self.pos[idx] if self.goals[idx] is not None else np.array((0, 0, 0))
+        dir_norm = np.linalg.norm(dir)
+        self.v_opt[idx] = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
+        if self.DIM == 2 :
+            self.v_opt[idx][2] = 0
 
-            q = msg.pose.pose.orientation
-        elif type(msg) == PoseStamped:
-            self.pos[idx, 0] = msg.pose.position.x
-            self.pos[idx, 1] = msg.pose.position.y
-            self.pos[idx, 2] = msg.pose.position.z
-
-            dir = self.goals[idx]-self.pos[idx] if self.goals[idx] is not None else np.array((0, 0, 0))
-            dir_norm = np.linalg.norm(dir)
-            self.v_opt[idx] = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
-            if self.DIM == 2 :
-                self.v_opt[idx][2] = 0
-
-            q = msg.pose.orientation
+        q = msg.pose.pose.orientation
 
         euler = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w]) # type: ignore
         self.angles[idx, 0] = euler[0]
@@ -517,7 +504,7 @@ class agent_RVO(Node) :
 
 def is_in_vo(idx, other_idx, v_test, pos) :
     TAU = 350
-    RADIUS = .13
+    RADIUS = .1
     MARGIN = 0
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :
