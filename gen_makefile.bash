@@ -50,7 +50,12 @@ real_launcher :
 
 real_hardware :
 #	sleep to be sure that this one is launched after the other one
-	@ gnome-terminal -- bash -c 'echo "backend : $(backend)"; sleep 3; source /opt/ros/humble/setup.bash; source install/setup.bash; ros2 launch crazyflie_ros2_setpoint_follower launch_cf_hardware.launch.py backend:=$(backend); exit'
+	@ gnome-terminal -- bash -c 'echo "backend : $(backend)";\
+								sleep 3;\
+								source /opt/ros/humble/setup.bash;\
+								source install/setup.bash;\
+								ros2 launch crazyflie_ros2_setpoint_follower launch_cf_hardware.launch.py backend:=$(backend);\
+								exit'
 
 real : compile
 	@ for mission in $(map); do\

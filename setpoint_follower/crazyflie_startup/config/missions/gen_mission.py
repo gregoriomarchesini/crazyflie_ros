@@ -93,7 +93,7 @@ with open (f"{abs_path}/circle.yaml", "w", encoding = "utf-8") as file:
     for i, bot in enumerate(BOTS) :
         print("  " * nb_tab + "agent_" + str(bot) + ":", file = file)
         nb_tab += 1
-        pos = [0.5, (1-2*(i%2)) * RADIUS*((i+1)//2), POS_Z]
+        pos = [0.5*(1-i//6), (1-2*((i%6)%2)) * RADIUS*(((i%6)+1)//2), POS_Z]
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
         print("  "*nb_tab + "radio: " + bot_radio[bot], file = file)
@@ -113,7 +113,7 @@ with open (f"{abs_path}/circle.yaml", "w", encoding = "utf-8") as file:
         angle = np.pi*(p%2)
         for i, bot in enumerate(BOTS) :
             if p == 2 :
-                goal = [0.5, (1-2*(i%2)) * RADIUS*((i+1)//2)]
+                goal = [0.5*(1-i//6), (1-2*((i%6)%2)) * RADIUS*(((i%6)+1)//2)]
             else :
                 goal = np.array([RADIUS*np.cos(angle), RADIUS*np.sin(angle)])
                 angle += 2*np.pi/NB_BOT
@@ -186,7 +186,7 @@ with open (f"{abs_path}/test_real.yaml", "w", encoding = "utf-8") as file:
     for i, bot in enumerate(BOTS) :
         print("  " * nb_tab + "agent_" + str(bot) + ":", file = file)
         nb_tab += 1
-        pos = [0.5, (1-2*(i%2)) * RADIUS*((i+1)//2), POS_Z]
+        pos = [0.5*(1-i//6), (1-2*((i%6)%2)) * RADIUS*(((i%6)+1)//2), POS_Z]
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
         print("  "*nb_tab + "radio: " + bot_radio[bot], file = file)
@@ -206,7 +206,7 @@ with open (f"{abs_path}/test_real.yaml", "w", encoding = "utf-8") as file:
         for i,bot in enumerate(BOTS) :
             print("  " * nb_tab + f"task_{p*NB_BOT + i}:", file = file)
             nb_tab+=1
-            goal = [-0.5 if p == 0 else 0.5, (1-2*(i%2)) * RADIUS*((i+1)//2)]
+            goal = [-0.5*(i//6) if p == 0 else 0.5*(1-i//6), (1-2*((i%6)%2)) * RADIUS*(((i%6)+1)//2)]
             print("  "*nb_tab + f"period_num: {p}", file = file)
             print("  "*nb_tab + "bot: " + str(bot), file = file)
             print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)
