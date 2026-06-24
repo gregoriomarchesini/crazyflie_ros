@@ -1,9 +1,9 @@
 #!/usr/bin/env python3.10
 
-import numpy as np
-import sys
 import re
 import os
+import sys
+import numpy as np
 
 rel_path = os.path.dirname(os.path.relpath(__file__))
 abs_path = os.path.dirname(os.path.abspath(__file__))
@@ -11,28 +11,40 @@ abs_path = os.path.dirname(os.path.abspath(__file__))
 NB_BOT = 10
 RADIUS = .5
 PERIOD_SIZE = 20
-DEFAULT_CHANNEL = "\"80\""
-DEFAULT_RADIO = "\"0\""
+CHANNELS = []
 BOTS = []
 CPP = False
 seen_index = set()
+imposed_order = {}
 
 if len(sys.argv) > 1 :
     for i, arg in enumerate(sys.argv[1:]) :
-        if arg.startswith("default_channel=") :
-            DEFAULT_CHANNEL = "\"" + re.split(r"[\D]+", arg)[1] + "\""
-            seen_index.add(i)
-        if arg.startswith("default_radio=") :
-            seen_index.add(i)
-            if not CPP :
-                DEFAULT_RADIO = "\"" + re.split(r"[\D]+", arg)[1] + "\""
+        if re.fullmatch(r"\d+:\d+:?\d*", arg) :
+            split = re.split(r":", arg)
+            channel = "\"" + split[1] + "\""
+            if not channel in CHANNELS :
+                CHANNELS.append(channel)
+            if len(split) == 3 and split[2] and split[1] :
+                radio = int(split[2])
+                for key, value in imposed_order.items() :
+                    if (key == radio and value != channel) or (key != radio and value == channel) :
+                        raise ValueError(f"The radio {radio} is attributed to two frequencies, this is not possible")
+                imposed_order[radio] = channel
         if arg == "cpp" :
             seen_index.add(i)
             CPP = True
             DEFAULT_RADIO = "\"*\""
 
+for radio, channel in imposed_order.items() :
+    if radio >= len(CHANNELS) :
+        raise ValueError(f"There are not enough radio to have a radio number {radio}")
+    CHANNELS[CHANNELS.index(channel)] = CHANNELS[radio]
+    CHANNELS[radio] = channel
+
 bot_channel = {}
 bot_radio = {}
+if not CHANNELS :
+    CHANNELS.append("\"80\"")
 
 if len(sys.argv) > 1 :
     for i, arg in enumerate(sys.argv[1:]) :
@@ -49,13 +61,13 @@ if len(sys.argv) > 1 :
                     case 0 :
                         BOTS.append(int(value))
                     case 1 :
-                        bot_channel[BOTS[-1]] = "\"" + value + "\"" if value else DEFAULT_CHANNEL
+                        bot_channel[BOTS[-1]] = "\"" + value + "\"" if value else (CHANNELS[int(split[2])] if len(split) == 3 and split[2] and int(split[2]) < len(CHANNELS) else CHANNELS[0])
                     case 2 :
-                        bot_radio[BOTS[-1]] = "\"" + value + "\"" if value and not CPP else DEFAULT_RADIO
+                        bot_radio[BOTS[-1]] = "\"" + value + "\"" if value and not CPP else "\"" + str(CHANNELS.index(bot_channel[BOTS[-1]])) + "\""
             if len(split) < 2 :
-                bot_channel[BOTS[-1]] = DEFAULT_CHANNEL
+                bot_channel[BOTS[-1]] = CHANNELS[0]
             if len(split) < 3 :
-                bot_radio[BOTS[-1]] = DEFAULT_RADIO
+                bot_radio[BOTS[-1]] = "\"" + str(CHANNELS.index(bot_channel[BOTS[-1]])) + "\""
         elif not i in seen_index :
             raise ValueError(f"The arg {arg} is not recognised")
 
