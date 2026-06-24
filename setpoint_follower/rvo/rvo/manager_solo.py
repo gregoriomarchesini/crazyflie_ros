@@ -5,7 +5,7 @@ import numpy as np
 
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from scipy.optimize import minimize, LinearConstraint
+# from scipy.optimize import minimize, LinearConstraint
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rvo.utils import WorkingMode, AgentState, ManagerState, AnsiColor, Task
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy

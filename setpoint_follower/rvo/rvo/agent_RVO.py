@@ -4,7 +4,6 @@ import signal
 import numpy as np
 import tf_transformations
 
-from rvo.RVO import RVO
 from rclpy.node import Node
 from multiprocessing import Pool
 from rclpy.executors import MultiThreadedExecutor

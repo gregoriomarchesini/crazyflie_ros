@@ -3,7 +3,6 @@ import rclpy
 import numpy as np
 import tf_transformations
 
-from rvo.RVO import RVO
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from motion_capture_tracking_interfaces.msg import NamedPoseArray
