@@ -74,6 +74,7 @@ class agent_RVO(Node) :
 
         self.cmd_vel = False
         self.cmd_all = True
+        self.time_between_command = .5
         if self.cmd_vel :
             cmd_name = {True: "/cmd_vel", False: "/cmd_full_state"}
             cmd_type = {True: Twist     , False: FullState}
@@ -83,6 +84,7 @@ class agent_RVO(Node) :
         self.takeoff_services = []
         self.landing_services = []
         self.start_height = []
+        self.command_time = [self.time_between_command*i/self.NUM_AGENTS for i in range(self.NUM_AGENTS)]
         if self.cmd_all and not self.simu:
             self.takeoff_services = self.create_client(Takeoff, 'all/takeoff')
             while not self.takeoff_services.wait_for_service(timeout_sec=1) :
@@ -379,7 +381,12 @@ class agent_RVO(Node) :
 
     def run_mission(self) :
         try :
-            new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel) for idx in range(self.NUM_AGENTS)])
+            time_sec = self.time.nanoseconds / 1e9
+            if self.simu :
+                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel) for idx in range(self.NUM_AGENTS)])
+            else :
+                compute_idx = [idx for idx in range(self.NUM_AGENTS) if time_sec >= self.command_time[idx]]
+                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel) for idx in compute_idx])
 
             if self.simu:
                 for idx, publisher in enumerate(self.twist_publishers):
@@ -394,9 +401,11 @@ class agent_RVO(Node) :
                     if self.DIM == 2 :
                         self.vel[idx][2] = 0
             else :
-                for idx, publisher in enumerate(self.twist_publishers):
-                    vel_norm = np.linalg.norm(new_vel[idx])
-                    if self.dist_goal[idx] < .2 and np.array_equal(new_vel[idx], self.v_opt[idx]) :
+                for i, idx in enumerate(compute_idx): # type: ignore
+                    self.command_time[idx] += self.time_between_command
+                    publisher = self.twist_publishers[idx]
+                    vel_norm = np.linalg.norm(new_vel[i])
+                    if self.dist_goal[idx] < .2 and np.array_equal(new_vel[i], self.v_opt[idx]) :
                         x_new = self.goals[idx]
                         if not self.cmd_vel and not self.stabilized[idx] :
                             # self.get_logger().info(f"{AnsiColor.VIOLET} Stabilizing the drone {AnsiColor.RESET}")
@@ -418,11 +427,11 @@ class agent_RVO(Node) :
                         # self.get_logger().info(f"{AnsiColor.VIOLET} dist to goal : {self.dist_goal[idx]}, pos : {self.pos[idx]} , goal {self.goals[idx]} :  {AnsiColor.RESET}")
                         MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
                         # MINIMAL_SIZE_STEP = vel_norm
-                        dp = new_vel[idx]
+                        dp = new_vel[i]
                         dp_norm = np.linalg.norm(dp)
                         if self.cmd_vel :
                             MINIMAL_SIZE_STEP = .2
-                        if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[idx], self.v_opt[idx]) :
+                        if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[i], self.v_opt[idx]) :
                             dp = dp/dp_norm * MINIMAL_SIZE_STEP
                             dp_norm = MINIMAL_SIZE_STEP
                         x_new = self.pos[idx] + dp
@@ -432,9 +441,9 @@ class agent_RVO(Node) :
                     #     self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]},\n\t\t pos : {self.pos[idx]},\n\t\t goal : {self.goals[idx]},\n\t\t v_opt : {self.v_opt[idx]};\n\t\t x_new : {x_new} {AnsiColor.RESET}\n", throttle_duration_sec=1)
                     if self.cmd_vel :
                         msg = FullState()
-                        msg.twist.linear.x = float(new_vel[idx][0])
-                        msg.twist.linear.y = float(new_vel[idx][1])
-                        msg.twist.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
+                        msg.twist.linear.x = float(new_vel[i][0])
+                        msg.twist.linear.y = float(new_vel[i][1])
+                        msg.twist.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[i][2])
                         msg.twist.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
                         msg.pose.position.x = float(x_new[0]) # type: ignore
                         msg.pose.position.y = float(x_new[1]) # type: ignore
@@ -455,7 +464,7 @@ class agent_RVO(Node) :
                         # self.get_logger().info(f"{AnsiColor.VIOLET} duration : {duration} {AnsiColor.RESET}")
                         self.twist_publishers[idx].call_async(req)
 
-                    self.vel[idx] = new_vel[idx]
+                    self.vel[idx] = new_vel[i]
                     if self.DIM == 2 :
                         self.vel[idx][2] = 0
         except KeyboardInterrupt :
@@ -476,6 +485,7 @@ class agent_RVO(Node) :
             case AgentState.TAKEOFF :
                 is_finished = self.initiate_takeoff()
                 if is_finished:
+                    self.command_time = [self.time.nanoseconds/1e9 + t for t in self.command_time]
                     self.state = AgentState.READY
                     self.get_logger().info(f'{AnsiColor.BLUE} Switching to READY state. Starting MPC mission...{AnsiColor.RESET}')
                     self.start_time = self.get_clock().now()
@@ -503,7 +513,7 @@ class agent_RVO(Node) :
 
 def is_in_vo(idx, other_idx, v_test, pos) :
     TAU = 350
-    RADIUS = .1
+    RADIUS = .15
     MARGIN = 0
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :
