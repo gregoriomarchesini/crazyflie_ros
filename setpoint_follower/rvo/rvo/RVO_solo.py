@@ -75,7 +75,7 @@ class agent_RVO(Node) :
         cmd_type = {True: Twist     , False: Position}
 
         self.cmd_vel = False
-        self.all_cmd = False
+        self.all_cmd = True
 
         if self.cmd_vel :
             cmd_name = {True: "/cmd_vel", False: "/cmd_vel_world"}
@@ -139,7 +139,7 @@ class agent_RVO(Node) :
         self.dist_goal = 10
         self.start_height = None
 
-        self.timer = self.create_timer(self.AGENT_TIMER, self.RVO_callback) # type: ignore
+        self.timer = self.create_timer(0.5, self.RVO_callback) # type: ignore
 
         self.state = AgentState.TAKEOFF
         self.get_logger().info(f'Agent state : {self.state.name}')

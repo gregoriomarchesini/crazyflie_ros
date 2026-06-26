@@ -73,7 +73,7 @@ class agent_RVO(Node) :
         cmd_type = {True: Twist     , False: Position}
 
         self.cmd_vel = False
-        self.cmd_all = False
+        self.cmd_all = True
         self.time_between_command = 0.5
         if self.cmd_vel :
             cmd_name = {True: "/cmd_vel", False: "/cmd_full_state"}
@@ -403,10 +403,10 @@ class agent_RVO(Node) :
                         self.vel[idx][2] = 0
             else :
                 for i, idx in enumerate(compute_idx): # type: ignore
-                    self.command_time[idx] += self.time_between_command
+                    self.command_time[idx] = time_sec + self.time_between_command
                     publisher = self.twist_publishers[idx]
                     vel_norm = np.linalg.norm(new_vel[i])
-                    if (self.dist_goal[idx] < .2 or self.stabilized[idx]) and np.array_equal(new_vel[i], self.v_opt[idx]) :
+                    if (self.dist_goal[idx] < 2*self.SPEED or self.stabilized[idx]) and np.array_equal(new_vel[i], self.v_opt[idx]) :
                         x_new = self.goals[idx]
                         if not self.cmd_vel and not self.stabilized[idx] :
                             # self.get_logger().info(f"{AnsiColor.VIOLET} Stabilizing the drone {AnsiColor.RESET}")
@@ -417,7 +417,7 @@ class agent_RVO(Node) :
                             goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                             req.goal = goal
                             req.yaw = 0.
-                            duration = np.linalg.norm(x_new-self.pos[idx])/vel_norm if vel_norm != 0 else 0
+                            duration = 2*np.linalg.norm(x_new-self.pos[idx])/vel_norm if vel_norm != 0 else 0
                             duration = max(duration, 1)
                             req.duration.sec = int(duration)
                             req.duration.nanosec = int((duration%1)*1e9)
@@ -426,15 +426,15 @@ class agent_RVO(Node) :
                     else :
                         self.stabilized[idx] = False
                         self.get_logger().info(f"{AnsiColor.VIOLET} dist to goal : {self.dist_goal[idx]},\n\t\t pos : {self.pos[idx]} ,\n\t\t goal : {self.goals[idx]};\n\t\t vel : {new_vel[i]}; \n\t\t v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
-                        MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
+                        # MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
                         # MINIMAL_SIZE_STEP = vel_norm
                         dp = new_vel[i]
-                        dp_norm = np.linalg.norm(dp)
-                        if self.cmd_vel :
-                            MINIMAL_SIZE_STEP = .2
-                        if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[i], self.v_opt[idx]) :
-                            dp = dp/dp_norm * MINIMAL_SIZE_STEP
-                            dp_norm = MINIMAL_SIZE_STEP
+                        # dp_norm = np.linalg.norm(dp)
+                        # if self.cmd_vel :
+                        #     MINIMAL_SIZE_STEP = .2
+                        # if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[i], self.v_opt[idx]) :
+                        #     dp = dp/dp_norm * MINIMAL_SIZE_STEP
+                        #     dp_norm = MINIMAL_SIZE_STEP
                         x_new = self.pos[idx] + dp
                     # if idx == self.name_to_index[f"crazyflie9"] :
                     #     new_vel[idx][2] = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
@@ -458,14 +458,14 @@ class agent_RVO(Node) :
                         goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                         req.goal = goal
                         req.yaw = 0.
-                        duration = dp_norm/vel_norm if vel_norm != 0 else 0 # type: ignore
+                        duration = 2 if vel_norm != 0 else 0
                         duration = max(duration, 1)
                         req.duration.sec = int(duration)
                         req.duration.nanosec = int((duration%1)*1e9)
                         # self.get_logger().info(f"{AnsiColor.VIOLET} duration : {duration} {AnsiColor.RESET}")
                         self.twist_publishers[idx].call_async(req)
 
-                    self.vel[idx] = new_vel[i]
+                    self.vel[idx] = np.array([0, 0, 0]) if self.stabilized[idx] and self.dist_goal[idx] < .05 else new_vel[i] 
                     if self.DIM == 2 :
                         self.vel[idx][2] = 0
         except KeyboardInterrupt :
@@ -513,7 +513,7 @@ class agent_RVO(Node) :
             rclpy.spin_once(self, timeout_sec=0.1)
 
 def is_in_vo(idx, other_idx, v_test, pos) :
-    TAU = 10
+    TAU = 3
     RADIUS = .15
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :
