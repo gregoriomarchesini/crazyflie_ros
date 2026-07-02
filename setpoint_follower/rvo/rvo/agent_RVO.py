@@ -378,16 +378,16 @@ class agent_RVO(Node) :
 
         return landing_finished
 
-# ──────── Apply RVO ────────────────────────────────────────────────────────────────────────────────
+# ──────── Apply RVO ──────────────────────────────────────────────────────────────────────────────
 
     def run_mission(self) :
         try :
             time_sec = self.time.nanoseconds / 1e9
             if self.simu :
-                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel) for idx in range(self.NUM_AGENTS)])
+                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized) for idx in range(self.NUM_AGENTS)])
             else :
                 compute_idx = [idx for idx in range(self.NUM_AGENTS) if time_sec >= self.command_time[idx]]
-                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel) for idx in compute_idx])
+                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized) for idx in compute_idx])
 
             if self.simu:
                 for idx, publisher in enumerate(self.twist_publishers):
@@ -397,6 +397,8 @@ class agent_RVO(Node) :
                     msg.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
                     msg.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
                     publisher.publish(msg)
+                    if (self.dist_goal[idx] < .1 and np.array_equal(new_vel[idx], self.v_opt[idx])) :
+                        self.stabilized[idx] = True
                     # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
                     self.vel[idx] = new_vel[idx]
                     if self.DIM == 2 :
@@ -406,7 +408,7 @@ class agent_RVO(Node) :
                     self.command_time[idx] = time_sec + self.time_between_command
                     publisher = self.twist_publishers[idx]
                     vel_norm = np.linalg.norm(new_vel[i])
-                    if (self.dist_goal[idx] < 2*self.SPEED or self.stabilized[idx]) and np.array_equal(new_vel[i], self.v_opt[idx]) :
+                    if (self.dist_goal[idx] < self.SPEED or self.stabilized[idx]) and np.array_equal(new_vel[i], self.v_opt[idx]) : # type: ignore
                         x_new = self.goals[idx]
                         if not self.cmd_vel and not self.stabilized[idx] :
                             # self.get_logger().info(f"{AnsiColor.VIOLET} Stabilizing the drone {AnsiColor.RESET}")
@@ -512,9 +514,9 @@ class agent_RVO(Node) :
             self.get_logger().info("Waiting for valid ROS time...")
             rclpy.spin_once(self, timeout_sec=0.1)
 
-def is_in_vo(idx, other_idx, v_test, pos) :
+def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
     TAU = 3
-    RADIUS = .15
+    RADIUS = .15 if not stabilized[other_idx] else .1
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :
         return 0
@@ -533,7 +535,7 @@ def is_in_vo(idx, other_idx, v_test, pos) :
         return v_norm/lambda_
     return 0
 
-def RVO_loc(idx, test_velocities, v_opt, pos, vel) :
+def RVO_loc(idx, test_velocities, v_opt, pos, vel, stabilized) :
     DIST_DETECT = 3
     v_tests = [v for v in test_velocities] + [v_opt[idx]]
     v_tests.sort(key = lambda x : np.linalg.norm(v_opt[idx] - x))
@@ -541,7 +543,7 @@ def RVO_loc(idx, test_velocities, v_opt, pos, vel) :
     for other_idx, pos_other in enumerate(pos) :
         if (other_idx != idx and np.linalg.norm(pos[idx] - pos_other) <= DIST_DETECT) :
             for i, v in enumerate(v_tests) :
-                res = is_in_vo(idx, other_idx, 2*v-vel[idx]-vel[other_idx], pos)
+                res = is_in_vo(idx, other_idx, 2*v-vel[idx]-vel[other_idx], pos, stabilized)
                 costs[i] += res # type: ignore
 
     # self.get_logger().info(f"{AnsiColor.VIOLET} cost : {costs} {AnsiColor.RESET}")
