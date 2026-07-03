@@ -9,7 +9,7 @@ rel_path = os.path.dirname(os.path.relpath(__file__))
 abs_path = os.path.dirname(os.path.abspath(__file__))
 
 NB_BOT = 10
-RADIUS = .7
+RADIUS = 1
 PERIOD_SIZE = 20
 CHANNELS = []
 BOTS = []
@@ -49,11 +49,11 @@ if not CHANNELS :
 if len(sys.argv) > 1 :
     for i, arg in enumerate(sys.argv[1:]) :
         if arg.startswith("nb_bot=") :
-            NB_BOT = int(re.split(r"[^\d:]+", arg)[1])
+            NB_BOT = int(re.split(r"[^\d]+", arg)[1])
         elif arg.startswith("radius=") :
-            RADIUS = int(re.split(r"[^\d:]+", arg)[1])
+            RADIUS = float(re.split(r"[^\d.]+", arg)[1])
         elif arg.startswith("period_size=") :
-            PERIOD_SIZE = int(re.split(r"[^\d:]+", arg)[1])
+            PERIOD_SIZE = int(re.split(r"[^\d]+", arg)[1])
         elif re.fullmatch(r"\d+:?\d*:?\d*", arg) :
             split = re.split(r":", arg)
             for idx, value in enumerate(re.split(r":", arg)) :
@@ -80,7 +80,7 @@ PARAM = [
     "DIM: 2",
     "MANAGER_TIMER: 0.8",
     "AGENT_TIMER: 0.05",
-    "SPEED: 0.1",
+    "SPEED: 0.2",
     "BOX_WEIGHT: 10",
     "COMM_DISTANCE: 3.",
     "HOOVERING_HEIGHT: 1."
@@ -231,7 +231,7 @@ PARAM = [
     "DIM: 3",
     "MANAGER_TIMER: 0.8",
     "AGENT_TIMER: 0.05",
-    "SPEED: 0.1",
+    "SPEED: 0.2",
     "BOX_WEIGHT: 10",
     "COMM_DISTANCE: 3.",
     "HOOVERING_HEIGHT: 1."
@@ -243,7 +243,7 @@ for i in range(NB_BOT) :
     phi = np.arccos(1-2*i/NB_BOT)
     angles_3d.append(RADIUS*np.array((np.cos(theta)*np.sin(phi), np.sin(phi)*np.sin(theta), np.cos(phi))))
 
-SPHERE_CENTER = np.array((0, 0, RADIUS+1))
+SPHERE_CENTER = np.array((0, 0, RADIUS+.5))
 
 # A sphere and the drones cross it
 with open (f"{abs_path}/sphere.yaml", "w", encoding = "utf-8") as file:
@@ -257,31 +257,33 @@ with open (f"{abs_path}/sphere.yaml", "w", encoding = "utf-8") as file:
 
     angle = 0
     goals = []
-    for i in BOTS :
-        print("  " * nb_tab + "agent_" + str(i) + ":", file = file)
+    for i, bot in enumerate(BOTS) :
+        print("  " * nb_tab + "agent_" + str(bot) + ":", file = file)
         nb_tab += 1
-        pos = [RADIUS*np.cos(angle), RADIUS*np.sin(angle), POS_Z]
-        angle += 2*np.pi/NB_BOT
+        pos = [0.5*(1-i//6), (1-2*((i%6)%2)) * 0.5*(((i%6)+1)//2), POS_Z]
         pos = [float(p) for p in pos]
         print("  "*nb_tab + "pos: " + str(pos), file = file)
-        print("  "*nb_tab + "radio: " + bot_radio[i], file = file)
-        print("  "*nb_tab + "channel: " + bot_channel[i], file = file)
+        print("  "*nb_tab + "radio: " + bot_radio[bot], file = file)
+        print("  "*nb_tab + "channel: " + bot_channel[bot], file = file)
         nb_tab -= 1
 
     print("\n" + "  "*nb_tab + "PERIODS:", file = file)
     nb_tab+= 1
-    for i in range(1, 3) :
+    for i in range(1, 4) :
         print("  "*nb_tab + "period_" + str(i-1) + ": " + str([PERIOD_SIZE*i-5, PERIOD_SIZE*i]), file = file)
     nb_tab -= 1
 
     print("\n" + "  "*nb_tab + "TASKS:", file = file)
     nb_tab += 1
-    for p in range(2) :
+    for p in range(3) :
         print("\n" +  "  " * nb_tab + f"# Period {p} \n", file = file)
         for i, bot in enumerate(BOTS) :
             print("  " * nb_tab + f"task_{p*NB_BOT + i+1}:", file = file)
             nb_tab+=1
-            goal = (SPHERE_CENTER + angles_3d[i]) if p%2 else (SPHERE_CENTER - angles_3d[i])
+            if p == 2 :
+                goal = [0.5*(1-i//6), (1-2*((i%6)%2)) * 0.5*(((i%6)+1)//2), 1]
+            else :
+                goal = (SPHERE_CENTER + angles_3d[i]) if p%2 else (SPHERE_CENTER - angles_3d[i])
             print("  "*nb_tab + f"period_num: {p}", file = file)
             print("  "*nb_tab + "bot: " + str(bot), file = file)
             print("  "*nb_tab + "goal: " + str([float(x) for x in goal]), file = file)

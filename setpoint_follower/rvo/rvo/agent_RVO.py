@@ -73,7 +73,7 @@ class agent_RVO(Node) :
         cmd_type = {True: Twist     , False: Position}
 
         self.cmd_vel = False
-        self.cmd_all = True
+        self.cmd_all = False
         self.time_between_command = 0.5
         if self.cmd_vel :
             cmd_name = {True: "/cmd_vel", False: "/cmd_full_state"}
@@ -281,6 +281,7 @@ class agent_RVO(Node) :
         self.time         = self.get_clock().now() - self.start_takeoff_time
 
         if self.simu:
+            self.start_height = 0
             for idx, publisher in enumerate(self.twist_publishers):
                 msg = Twist()
                 msg.linear.z = np.clip((self.hoover_heights[idx] - self.pos[idx, 2]), -self.Z_SPEED, self.Z_SPEED) # go to one meter altitude
@@ -384,10 +385,10 @@ class agent_RVO(Node) :
         try :
             time_sec = self.time.nanoseconds / 1e9
             if self.simu :
-                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized) for idx in range(self.NUM_AGENTS)])
+                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized, self.start_height) for idx in range(self.NUM_AGENTS)])
             else :
                 compute_idx = [idx for idx in range(self.NUM_AGENTS) if time_sec >= self.command_time[idx]]
-                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized) for idx in compute_idx])
+                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized, self.start_height if self.cmd_all else min(self.start_height)) for idx in compute_idx])
 
             if self.simu:
                 for idx, publisher in enumerate(self.twist_publishers):
@@ -427,7 +428,8 @@ class agent_RVO(Node) :
                             self.stabilized[idx] = True
                     else :
                         self.stabilized[idx] = False
-                        self.get_logger().info(f"{AnsiColor.VIOLET} dist to goal : {self.dist_goal[idx]},\n\t\t pos : {self.pos[idx]} ,\n\t\t goal : {self.goals[idx]};\n\t\t vel : {new_vel[i]}; \n\t\t v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
+                        # self.get_logger().info(f"{AnsiColor.VIOLET} dist to goal : {self.dist_goal[idx]},\n\t\t pos : {self.pos[idx]} ,\n\t\t goal : {self.goals[idx]};\n\t\t vel : {new_vel[i]}; \n\t\t v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
+                        # self.get_logger().info(f"{AnsiColor.VIOLET} drone {self.drones_names[idx]} not stable yet; dist to goal : {self.dist_goal[idx]} {AnsiColor.RESET}")
                         # MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
                         # MINIMAL_SIZE_STEP = vel_norm
                         dp = new_vel[i]
@@ -515,8 +517,10 @@ class agent_RVO(Node) :
             rclpy.spin_once(self, timeout_sec=0.1)
 
 def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
+    if stabilized[idx] and stabilized[other_idx] :
+        return 0
     TAU = 3
-    RADIUS = .15 if not stabilized[other_idx] else .1
+    RADIUS = (.15 if not stabilized[other_idx] else .1) if agents.DIM == 2 else (.2 if not stabilized[other_idx] else .1)
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :
         return 0
@@ -535,7 +539,7 @@ def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
         return v_norm/lambda_
     return 0
 
-def RVO_loc(idx, test_velocities, v_opt, pos, vel, stabilized) :
+def RVO_loc(idx, test_velocities, v_opt, pos, vel, stabilized, floor) :
     DIST_DETECT = 3
     v_tests = [v for v in test_velocities] + [v_opt[idx]]
     v_tests.sort(key = lambda x : np.linalg.norm(v_opt[idx] - x))
@@ -543,10 +547,8 @@ def RVO_loc(idx, test_velocities, v_opt, pos, vel, stabilized) :
     for other_idx, pos_other in enumerate(pos) :
         if (other_idx != idx and np.linalg.norm(pos[idx] - pos_other) <= DIST_DETECT) :
             for i, v in enumerate(v_tests) :
-                res = is_in_vo(idx, other_idx, 2*v-vel[idx]-vel[other_idx], pos, stabilized)
+                res = np.inf if pos[idx, 2]-floor < -v[2]*agents.time_between_command else is_in_vo(idx, other_idx, 2*v-vel[idx]-vel[other_idx], pos, stabilized)
                 costs[i] += res # type: ignore
-
-    # self.get_logger().info(f"{AnsiColor.VIOLET} cost : {costs} {AnsiColor.RESET}")
     return v_tests[np.argmin(costs)]
 
 def signal_handler(sig, frame):
