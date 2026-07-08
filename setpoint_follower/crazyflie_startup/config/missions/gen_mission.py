@@ -19,7 +19,7 @@ imposed_order = {}
 
 if len(sys.argv) > 1 :
     for i, arg in enumerate(sys.argv[1:]) :
-        if re.fullmatch(r"\d+:\d+:?\d*", arg) :
+        if re.fullmatch(r"\d+[\/\d+]*:\d+:?\d*", arg) :
             split = re.split(r":", arg)
             channel = "\"" + split[1] + "\""
             if not channel in CHANNELS :
@@ -54,20 +54,26 @@ if len(sys.argv) > 1 :
             RADIUS = float(re.split(r"[^\d.]+", arg)[1])
         elif arg.startswith("period_size=") :
             PERIOD_SIZE = int(re.split(r"[^\d]+", arg)[1])
-        elif re.fullmatch(r"\d+:?\d*:?\d*", arg) :
+        elif re.fullmatch(r"\d+[\/\d+]*:?\d*:?\d*", arg) :
             split = re.split(r":", arg)
-            for idx, value in enumerate(re.split(r":", arg)) :
+            bots = re.split(r"\/", split[0])
+            for idx, value in enumerate(split) :
                 match idx :
                     case 0 :
-                        BOTS.append(int(value))
+                        for bot in bots :
+                            BOTS.append(int(bot))
                     case 1 :
-                        bot_channel[BOTS[-1]] = "\"" + value + "\"" if value else (CHANNELS[int(split[2])] if len(split) == 3 and split[2] and int(split[2]) < len(CHANNELS) else CHANNELS[0])
+                        for bot in bots :
+                            bot_channel[int(bot)] = "\"" + value + "\"" if value else (CHANNELS[int(split[2])] if len(split) == 3 and split[2] and int(split[2]) < len(CHANNELS) else CHANNELS[0])
                     case 2 :
-                        bot_radio[BOTS[-1]] = "\"" + value + "\"" if value and not CPP else ("\"*\"" if CPP else "\"" + str(CHANNELS.index(bot_channel[BOTS[-1]])) + "\"")
+                        for bot in bots :
+                            bot_radio[int(bot)] = "\"" + value + "\"" if value and not CPP else ("\"*\"" if CPP else "\"" + str(CHANNELS.index(bot_channel[BOTS[-1]])) + "\"")
             if len(split) < 2 :
-                bot_channel[BOTS[-1]] = CHANNELS[0]
+                for bot in bots :
+                    bot_channel[int(bot)] = CHANNELS[0]
             if len(split) < 3 :
-                bot_radio[BOTS[-1]] = "\"*\"" if CPP else "\"" + str(CHANNELS.index(bot_channel[BOTS[-1]])) + "\""
+                for bot in bots :
+                    bot_radio[int(bot)] = "\"*\"" if CPP else "\"" + str(CHANNELS.index(bot_channel[int(bot)])) + "\""
         elif not i in seen_index :
             raise ValueError(f"The arg {arg} is not recognised")
 

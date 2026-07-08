@@ -544,7 +544,7 @@ def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
     return 0
 
 def RVO_loc(idx, test_velocities, v_opt, pos, vel, stabilized, floor) :
-    DIST_DETECT = 0
+    DIST_DETECT = 3
     v_tests = [v for v in test_velocities] + [v_opt[idx]]
     v_tests.sort(key = lambda x : np.linalg.norm(v_opt[idx] - x))
     costs = [0 for _ in v_tests]
