@@ -13,12 +13,14 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
 from nav_msgs.msg import Odometry
-from rvo_interface.msg import Goal, Goallist  # type: ignore
 from std_msgs.msg import Int32, Bool
+from rcl_interfaces.msg import Parameter
 from geometry_msgs.msg import Point, PoseStamped, Twist
+from rvo_interface.msg import Goal, Goallist  # type: ignore
 from crazyflie_interfaces.msg import Position, FullState, VelocityWorld
 
 from std_srvs.srv import Empty
+from rcl_interfaces.srv import SetParameters
 from crazyflie_interfaces.srv import Takeoff, GoTo, Land, NotifySetpointsStop
 
 class agent_RVO(Node) :
@@ -298,7 +300,7 @@ class agent_RVO(Node) :
                     self.takeoff_services.call_async(req) # type: ignore
                 else :
                     for idx, publisher in enumerate(self.twist_publishers):
-                        self.start_height.append(self.pos[idx, 2])
+                        self.start_height.append(self.pos[idx, 2]) # type: ignore
                         self.takeoff(self.hoover_heights[idx], self.time_to_take_off, idx) # TODO: have a closer look at the height (ensure collsion avoidance)
 
         self.get_logger().info(f'{AnsiColor.BLUE} Taking off... Time elapsed: {self.time.nanoseconds / 1e9:.2f}s. Will finish at {self.time_to_take_off*2.0}s {AnsiColor.RESET}',throttle_duration_sec=2.0)
@@ -360,15 +362,15 @@ class agent_RVO(Node) :
                         # self.get_logger().info(f"{AnsiColor.VIOLET} landing called at height {self.start_height} {AnsiColor.RESET}")
                         req = Land.Request()
                         req.group_mask = 0
-                        req.height = self.start_height + 0.05 # type: ignore
+                        req.height = self.start_height + 0.05 # pyright: ignore[reportOperatorIssue]
                         req.duration = rclpy.duration.Duration(seconds=self.landing_time).to_msg() # type: ignore
                         self.landing_services.call_async(req) # type: ignore
                     else :
-                        for idx, srv in enumerate(self.landing_services) : # type: ignore
+                        for idx, srv in enumerate(self.landing_services) : # pyright: ignore[reportArgumentType]
                             req = Land.Request()
                             req.group_mask = 0
-                            req.height = self.start_height[idx] + 0.05
-                            req.duration = rclpy.duration.Duration(seconds=self.landing_time).to_msg() # type: ignore
+                            req.height = self.start_height[idx] + 0.05 # pyright: ignore[reportIndexIssue]
+                            req.duration = rclpy.duration.Duration(seconds=self.landing_time).to_msg() # pyright: ignore[reportAttributeAccessIssue]
                             srv.call_async(req)
 
         landing_finished = True
@@ -388,7 +390,7 @@ class agent_RVO(Node) :
                 new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized, self.start_height) for idx in range(self.NUM_AGENTS)])
             else :
                 compute_idx = [idx for idx in range(self.NUM_AGENTS) if time_sec >= self.command_time[idx]]
-                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized, self.start_height if self.cmd_all else min(self.start_height)) for idx in compute_idx])
+                new_vel = pool.starmap(RVO_loc, [(idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized, self.start_height if self.cmd_all else min(self.start_height)) for idx in compute_idx]) # type: ignore
 
             if self.simu:
                 for idx, publisher in enumerate(self.twist_publishers):
@@ -400,6 +402,8 @@ class agent_RVO(Node) :
                     publisher.publish(msg)
                     if (self.dist_goal[idx] < .1 and np.array_equal(new_vel[idx], self.v_opt[idx])) :
                         self.stabilized[idx] = True
+                    else :
+                        self.stabilized[idx] = False
                     # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
                     self.vel[idx] = new_vel[idx]
                     if self.DIM == 2 :
@@ -469,7 +473,7 @@ class agent_RVO(Node) :
                         # self.get_logger().info(f"{AnsiColor.VIOLET} duration : {duration} {AnsiColor.RESET}")
                         self.twist_publishers[idx].call_async(req)
 
-                    self.vel[idx] = np.array([0, 0, 0]) if self.stabilized[idx] and self.dist_goal[idx] < .05 else new_vel[i] 
+                    self.vel[idx] = np.array([0, 0, 0]) if self.stabilized[idx] and self.dist_goal[idx] < .05 else new_vel[i]
                     if self.DIM == 2 :
                         self.vel[idx][2] = 0
         except KeyboardInterrupt :
@@ -540,7 +544,7 @@ def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
     return 0
 
 def RVO_loc(idx, test_velocities, v_opt, pos, vel, stabilized, floor) :
-    DIST_DETECT = 3
+    DIST_DETECT = 0
     v_tests = [v for v in test_velocities] + [v_opt[idx]]
     v_tests.sort(key = lambda x : np.linalg.norm(v_opt[idx] - x))
     costs = [0 for _ in v_tests]

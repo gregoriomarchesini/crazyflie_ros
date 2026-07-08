@@ -188,7 +188,7 @@ class Manager(Node) :
                 if task.timespan[1] > self.recalc_times[0] :
                     break
                 if task.is_goal :
-                    self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, bot : {task.bot}, goal : {task.goal} {AnsiColor.RESET}")
+                    # self.get_logger().info(f"{AnsiColor.VIOLET} new task : period : {task.timespan}, bot : {task.bot}, goal : {task.goal} {AnsiColor.RESET}")
                     fixed_goals = True
                     known_pos[task.bot] = task.goal
                     self.tasks.pop()

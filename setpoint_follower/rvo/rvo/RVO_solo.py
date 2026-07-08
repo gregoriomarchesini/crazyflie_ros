@@ -60,6 +60,7 @@ class agent_RVO(Node) :
         self.Z_SPEED      = 0.5
 
         self.state_publisher      = self.create_publisher(Int32, f"/agent_state{self.NUMBER}", 10)
+        self.stab_pub             = self.create_publisher(Bool, f"/agent_stab{self.NUMBER}", 10)
         self.landing_command_sub  = self.create_subscription(Bool, "/landing_command", self.landing_command_callback, 10)
         self.stop_command_sub     = self.create_subscription(Bool, "/stop_command", self.on_stop_callback, 10)
         self.goal_command_sub     = self.create_subscription(Goal, f"/goal{self.NUMBER}", self.on_goal_callback, 10)
@@ -67,6 +68,7 @@ class agent_RVO(Node) :
         self.drones_names = ['crazyflie{}'.format(i) for i in self.AGENTS_INDICES] # type: ignore
         self.name_to_index = {name: i for i, name in enumerate(self.drones_names)}
         self.idx = self.name_to_index[f"crazyflie{self.NUMBER}"] # type: ignore
+        self.time_between_call = .5
 
         odom_name = {True: "/odom" , False: "/pose"}
         odom_type = {True: Odometry, False: PoseStamped}
@@ -82,19 +84,22 @@ class agent_RVO(Node) :
             cmd_type = {True: Twist     , False: VelocityWorld}
 
         self.odom_subscribers = []
+        self.stab_subscriber = []
         self.vel_publisher = self.create_publisher(Point, f"/vel_{self.NUMBER}", 10)
         self.vel_subscribers = []
+
         for idx, drone in enumerate(self.AGENTS_INDICES) : # type: ignore
             if drone != self.NUMBER :
                 callback = lambda x, idx = idx: self.on_vel_callback(x, idx)
                 self.vel_subscribers.append(self.create_subscription(Point, f"/vel_{drone}", callback, 10))
+                callback = lambda msg, idx = idx: self.stabilized_callback(msg, idx)
+                self.stab_subscriber.append(self.create_subscription(Bool, f"/agent_stab{drone}", callback, 10))
 
         if self.simu:
             self.twist_publisher = self.create_publisher(cmd_type[self.simu],f"crazyflie{self.NUMBER}" + cmd_name[self.simu],10)
             for i, drone in enumerate(self.drones_names):
                 callback = lambda msg, idx=i: self.odom_callback(msg, idx)
                 self.odom_subscribers.append(self.create_subscription(odom_type[self.simu], drone + odom_name[self.simu], callback, 10))
-
         elif self.simu is not None :
             global emergency
             emergency = self.create_client(Empty, 'all/emergency')
@@ -137,9 +142,8 @@ class agent_RVO(Node) :
         self.goal = None
         self.v_opt = np.zeros(3)
         self.dist_goal = 10
-        self.start_height = None
 
-        self.timer = self.create_timer(0.5, self.RVO_callback) # type: ignore
+        self.timer = self.create_timer(self.time_between_call, self.RVO_callback) # type: ignore
 
         self.state = AgentState.TAKEOFF
         self.get_logger().info(f'Agent state : {self.state.name}')
@@ -153,7 +157,7 @@ class agent_RVO(Node) :
         self.start_mission_time = None
         self.called_takeoff = False
         self.called_landing = False
-        self.stabilized = False
+        self.stabilized = [False for _ in range(self.NUM_AGENTS)]
 
         self.land_pose = None
         self.time_to_take_off = 3.
@@ -247,9 +251,13 @@ class agent_RVO(Node) :
         if self.DIM == 2 :
             self.v_opt[2] = 0
         self.dist_goal = np.linalg.norm(self.pos[self.idx]-self.goal) if self.goal is not None else 10
+        self.stabilized = [False] * len(self.stabilized)
 
     def on_vel_callback(self, msg, idx) :
         self.vel[idx] = np.array((msg.x, msg.y, msg.z))
+
+    def stabilized_callback(self, msg, idx) :
+        self.stabilized[idx] = msg.data
 
 # ──────── Take off ───────────────────────────────────────────────────────────────────────────────
 
@@ -258,13 +266,13 @@ class agent_RVO(Node) :
             self.start_takeoff_time = self.get_clock().now()
         
         self.time         = self.get_clock().now() - self.start_takeoff_time
+        self.start_height = self.pos[self.idx, 2]
 
         if self.simu:
             msg = Twist()
             msg.linear.z = np.clip((self.HOOVERING_HEIGHT - self.pos[self.idx, 2]), -self.Z_SPEED, self.Z_SPEED) # go to one meter altitude
             self.twist_publisher.publish(msg)
         else :
-            self.start_height = self.pos[self.idx, 2]
             if self.all_cmd :
                 if not agent_RVO.all_takeoff :
                     agent_RVO.all_takeoff = True
@@ -314,7 +322,7 @@ class agent_RVO(Node) :
                         agent_RVO.all_landing = True
                         req = Land.Request()
                         req.group_mask = 0
-                        req.height = self.start_height + 0.05 # type: ignore
+                        req.height = self.start_height + 0.05
                         req.duration = rclpy.duration.Duration(seconds=self.landing_time).to_msg() # type: ignore
                         agent_RVO.all_landing_service.call_async(req) # type: ignore
                 else :
@@ -322,7 +330,7 @@ class agent_RVO(Node) :
                         self.called_landing = False
                         req = Land.Request()
                         req.group_mask = 0
-                        req.height = self.start_height + 0.05 # type: ignore
+                        req.height = self.start_height + 0.05
                         req.duration = rclpy.duration.Duration(seconds=self.landing_time).to_msg() # type: ignore
                         self.landing_service.call_async(req)
         
@@ -332,7 +340,7 @@ class agent_RVO(Node) :
 
     def run_mission(self) :
         try :
-            new_vel = RVO_loc(self.idx, self.test_velocities, self.v_opt, self.pos, self.vel)
+            new_vel = RVO_loc(self.idx, self.test_velocities, self.v_opt, self.pos, self.vel, self.stabilized, self.start_height)
 
             if self.simu:
                 msg = Twist()
@@ -345,12 +353,24 @@ class agent_RVO(Node) :
                 self.vel[self.idx] = new_vel
                 if self.DIM == 2 :
                     self.vel[self.idx, 2] = 0
+                if (self.dist_goal < .1 and np.array_equal(new_vel, self.v_opt)) :
+                    if not self.stabilized[self.idx] :
+                        self.stabilized[self.idx] = True
+                        msg = Bool()
+                        msg.data = True
+                        self.stab_pub.publish(msg)
+                else :
+                    if self.stabilized[self.idx] :
+                        self.stabilized[self.idx] = False
+                        msg = Bool()
+                        msg.data = False
+                        self.stab_pub.publish(msg)
 
             else :
                 vel_norm = np.linalg.norm(new_vel)
                 if self.dist_goal < .2 and np.array_equal(new_vel, self.v_opt) :
                     x_new = self.goal
-                    if not self.cmd_vel and not self.stabilized :
+                    if not self.cmd_vel and not self.stabilized[self.idx] :
                         # self.get_logger().info(f"{AnsiColor.VIOLET} Stabilizing the drone {AnsiColor.RESET}")
                         req = GoTo.Request()
                         goal = Point()
@@ -364,9 +384,16 @@ class agent_RVO(Node) :
                         req.duration.sec = int(duration)
                         req.duration.nanosec = int((duration%1)*1e9)
                         self.goto_service.call_async(req)
-                        self.stabilized = True
+                        self.stabilized[self.idx] = True
+                        msg = Bool()
+                        msg.data = True
+                        self.stab_pub.publish(msg)
                 else :
-                    self.stabilized = False
+                    if self.stabilized[self.idx] :
+                        msg = Bool()
+                        msg.data = False
+                        self.stab_pub.publish(msg)
+                        self.stabilized[self.idx] = False
                     # self.get_logger().info(f"{AnsiColor.VIOLET} dist to goal : {self.dist_goal[idx]}, pos : {self.pos[idx]} , goal {self.goals[idx]} :  {AnsiColor.RESET}")
                     MINIMAL_SIZE_STEP = .05 if self.dist_goal < .4 else .1
                     # MINIMAL_SIZE_STEP = vel_norm
@@ -386,7 +413,7 @@ class agent_RVO(Node) :
                     msg.yaw_rate = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
                     self.twist_publisher.publish(msg)
                     # self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]}, pos : {self.pos[idx]}, goal : {self.goals[idx]}, v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
-                elif not self.stabilized :
+                elif not self.stabilized[self.idx] :
                     req = GoTo.Request()
                     goal = Point()
                     goal.x = float(x_new[0]) # type: ignore
@@ -400,7 +427,7 @@ class agent_RVO(Node) :
                     req.duration.nanosec = int((duration%1)*1e9)
                     self.goto_service.call_async(req)
 
-                self.vel[self.idx] = new_vel
+                self.vel[self.idx] = np.array([0, 0, 0]) if self.stabilized[self.idx] and self.dist_goal < .05 else new_vel
                 if self.DIM == 2 :
                     self.vel[self.idx, 2] = 0
 
@@ -452,10 +479,11 @@ class agent_RVO(Node) :
             self.get_logger().info("Waiting for valid ROS time...")
             rclpy.spin_once(self, timeout_sec=0.1)
 
-def is_in_vo(idx, other_idx, v_test, pos) :
-    TAU = 350
-    RADIUS = .1
-    MARGIN = 0
+def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
+    if stabilized[idx] and stabilized[other_idx] :
+        return 0
+    TAU = 3
+    RADIUS = (.15 if not stabilized[other_idx] else .1) if agents.DIM == 2 else (.2 if not stabilized[other_idx] else .1)
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :
         return 0
@@ -466,15 +494,15 @@ def is_in_vo(idx, other_idx, v_test, pos) :
         lambda_ = 0
     elif lambda_ > TAU * v_norm :
         lambda_ = TAU*v_norm
-    if (np.linalg.norm(dp-lambda_*v) <= 2*RADIUS + MARGIN) :
-        if lambda_ <= v_norm :
+    if (np.linalg.norm(dp-lambda_*v) <= 2*RADIUS) :
+        if lambda_ <= agents.time_between_call * v_norm :
             if dp@v > 0 :
                 return np.inf
             return 0
         return v_norm/lambda_
     return 0
 
-def RVO_loc(idx, test_velocities, v_opt, pos, vel) :
+def RVO_loc(idx, test_velocities, v_opt, pos, vel, stabilized, floor) :
     DIST_DETECT = 3
     v_tests = [v for v in test_velocities] + [v_opt]
     v_tests.sort(key = lambda x : np.linalg.norm(v_opt - x))
@@ -482,10 +510,8 @@ def RVO_loc(idx, test_velocities, v_opt, pos, vel) :
     for other_idx, pos_other in enumerate(pos) :
         if (other_idx != idx and np.linalg.norm(pos[idx] - pos_other) <= DIST_DETECT) :
             for i, v in enumerate(v_tests) :
-                res = is_in_vo(idx, other_idx, 2*v-vel[idx]-vel[other_idx], pos)
+                res = np.inf if pos[idx, 2]-floor < -v[2]*agents.time_between_call else is_in_vo(idx, other_idx, 2*v-vel[idx]-vel[other_idx], pos, stabilized)
                 costs[i] += res # type: ignore
-
-    # self.get_logger().info(f"{AnsiColor.VIOLET} cost : {costs} {AnsiColor.RESET}")
     return v_tests[np.argmin(costs)]
 
 def signal_handler(sig, frame):
