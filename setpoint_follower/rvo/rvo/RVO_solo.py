@@ -242,6 +242,7 @@ class agent_RVO(Node) :
     def on_goal_callback(self, msg) :
         if msg.has_one :
             self.goal = np.array((msg.pos.x, msg.pos.y, msg.pos.z))
+            self.goal[2] = self.HOOVERING_HEIGHT
         else :
             self.goal = None
 
@@ -258,6 +259,7 @@ class agent_RVO(Node) :
 
     def stabilized_callback(self, msg, idx) :
         self.stabilized[idx] = msg.data
+        self.get_logger().info(f"{AnsiColor.VIOLET} drone {idx} is stabilized {AnsiColor.RESET}")
 
 # ──────── Take off ───────────────────────────────────────────────────────────────────────────────
 
@@ -354,6 +356,7 @@ class agent_RVO(Node) :
                 if self.DIM == 2 :
                     self.vel[self.idx, 2] = 0
                 if (self.dist_goal < .1 and np.array_equal(new_vel, self.v_opt)) :
+                    # self.get_logger().info(f"{AnsiColor.VIOLET} sending : Stabilizing the drone {self.NUMBER} {AnsiColor.RESET}")
                     if not self.stabilized[self.idx] :
                         self.stabilized[self.idx] = True
                         msg = Bool()
@@ -376,7 +379,7 @@ class agent_RVO(Node) :
                         goal = Point()
                         goal.x = float(x_new[0]) # type: ignore
                         goal.y = float(x_new[1]) # type: ignore
-                        goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                        goal.z = float(self.HOOVERING_HEIGHT) if self.DIM == 2 else float(x_new[2]) # type: ignore
                         req.goal = goal
                         req.yaw = 0.
                         duration = np.linalg.norm(x_new-self.pos[self.idx])/vel_norm if vel_norm != 0 else 0
@@ -418,7 +421,7 @@ class agent_RVO(Node) :
                     goal = Point()
                     goal.x = float(x_new[0]) # type: ignore
                     goal.y = float(x_new[1]) # type: ignore
-                    goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                    goal.z = float(self.HOOVERING_HEIGHT) if self.DIM == 2 else float(x_new[2]) # type: ignore
                     req.goal = goal
                     req.yaw = 0.
                     duration = dp_norm/vel_norm if vel_norm != 0 else 0 # type: ignore

@@ -78,8 +78,8 @@ class agent_RVO(Node) :
         self.cmd_all = False
         self.time_between_command = 0.5
         if self.cmd_vel :
-            cmd_name = {True: "/cmd_vel", False: "/cmd_full_state"}
-            cmd_type = {True: Twist     , False: FullState}
+            cmd_name = {True: "/cmd_vel", False: "/cmd_velocity_world"}
+            cmd_type = {True: Twist     , False: VelocityWorld}
 
         self.odom_subscribers = []
         self.twist_publishers = []
@@ -340,22 +340,10 @@ class agent_RVO(Node) :
         else :
             if self.cmd_vel :
                 for idx, publisher in enumerate(self.twist_publishers):
-                    msg = FullState()
-                    msg.twist.linear.z = float(np.clip(-self.hoover_heights[idx]/self.landing_time, -self.Z_SPEED, self.Z_SPEED)) if self.DIM == 2 else float(np.clip(-self.pos[idx, 2], -self.Z_SPEED, self.Z_SPEED)) # type: ignore
-                    msg.pose.position.x = float(self.pos[idx, 0])
-                    msg.pose.position.y = float(self.pos[idx, 1])
-                    msg.pose.position.z = float(self.hoover_heights[idx]-self.hoover_heights[idx]/self.landing_time * (time_sec)) # type: ignore
+                    msg = VelocityWorld()
+                    msg.linear.z = float(np.clip(-self.hoover_heights[idx]/self.landing_time, -self.Z_SPEED, self.Z_SPEED)) if self.DIM == 2 else float(np.clip(-self.pos[idx, 2], -self.Z_SPEED, self.Z_SPEED)) # type: ignore
                     publisher.publish(msg)
             else :
-                # for idx, publisher in enumerate(self.twist_publishers):
-                    # req = GoTo.Request()
-                    # goal = Point()
-                    # goal.x = self.pos[idx, 0]
-                    # goal.y = self.pos[idx, 1]
-                    # goal.z = self.hoover_heights[idx]-self.hoover_heights[idx]/self.landing_time * (time_sec) # type: ignore
-                    # req.goal = goal
-                    # req.yaw = 0.
-                    # self.twist_publishers[idx].call_async(req)
                 if not self.called_landing :
                     self.called_landing = True
                     if self.cmd_all :
@@ -432,31 +420,14 @@ class agent_RVO(Node) :
                             self.stabilized[idx] = True
                     else :
                         self.stabilized[idx] = False
-                        # self.get_logger().info(f"{AnsiColor.VIOLET} dist to goal : {self.dist_goal[idx]},\n\t\t pos : {self.pos[idx]} ,\n\t\t goal : {self.goals[idx]};\n\t\t vel : {new_vel[i]}; \n\t\t v_opt : {self.v_opt[idx]} {AnsiColor.RESET}")
-                        # self.get_logger().info(f"{AnsiColor.VIOLET} drone {self.drones_names[idx]} not stable yet; dist to goal : {self.dist_goal[idx]} {AnsiColor.RESET}")
-                        # MINIMAL_SIZE_STEP = .05 if self.dist_goal[idx] < .4 else .1
-                        # MINIMAL_SIZE_STEP = vel_norm
                         dp = new_vel[i]
-                        # dp_norm = np.linalg.norm(dp)
-                        # if self.cmd_vel :
-                        #     MINIMAL_SIZE_STEP = .2
-                        # if dp_norm < MINIMAL_SIZE_STEP and np.array_equal(new_vel[i], self.v_opt[idx]) :
-                        #     dp = dp/dp_norm * MINIMAL_SIZE_STEP
-                        #     dp_norm = MINIMAL_SIZE_STEP
                         x_new = self.pos[idx] + dp
-                    # if idx == self.name_to_index[f"crazyflie9"] :
-                    #     new_vel[idx][2] = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
-                    #     x_new[2] = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
-                    #     self.get_logger().info(f"{AnsiColor.VIOLET} vel : {new_vel[idx]},\n\t\t pos : {self.pos[idx]},\n\t\t goal : {self.goals[idx]},\n\t\t v_opt : {self.v_opt[idx]};\n\t\t x_new : {x_new} {AnsiColor.RESET}\n", throttle_duration_sec=1)
                     if self.cmd_vel :
-                        msg = FullState()
-                        msg.twist.linear.x = float(new_vel[i][0])
-                        msg.twist.linear.y = float(new_vel[i][1])
-                        msg.twist.linear.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[i][2])
-                        msg.twist.angular.z = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # type: ignore
-                        msg.pose.position.x = float(x_new[0]) # type: ignore
-                        msg.pose.position.y = float(x_new[1]) # type: ignore
-                        msg.pose.position.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
+                        msg = VelocityWorld()
+                        msg.vel.x = float(new_vel[idx][0])
+                        msg.vel.y = float(new_vel[idx][1])
+                        msg.vel.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
+                        msg.yaw_rate = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # pyright: ignore[reportOptionalOperand]
                         publisher.publish(msg)
                     elif not self.stabilized[idx] :
                         req = GoTo.Request()
