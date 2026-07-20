@@ -15,8 +15,8 @@ nb_period_modif_theta = 15
 nb_period_land = 10
 nb_period = nb_period_rota + nb_period_transi_1 + nb_period_transi_2 + nb_period_ring + nb_period_modif_theta + nb_period_land
 speed = 0.2
-hoov_height = 1.5
-big_radius = .8
+hoov_height = 1.3
+big_radius = 1.2
 small_radius = big_radius * np.sqrt(2)
 
 param = [
@@ -175,7 +175,7 @@ with open("pretty.yaml", mode="w", encoding="utf-8") as file :
             tab -= 1
     
     nb_period_done += nb_period_ring
-    omega = speed/big_radius
+    omega = 1.5*speed/big_radius
     ring = [abs(a) < omega/2 for a in angles]
     alphas = [np.pi/2] * len(agents)
 
@@ -254,7 +254,7 @@ with open("pretty.yaml", mode="w", encoding="utf-8") as file :
             alphas[i] = alpha%(2*np.pi)  # pyright: ignore[reportArgumentType, reportCallIssue]
             x = big_radius*np.sin(alpha)
             y = big_radius*np.cos(alpha)
-            z = hoov_height + (.5-hoov_height)/(nb_period_land-1)*p
+            z = hoov_height + (.3-hoov_height)/(nb_period_land-1)*p
             print("  "*tab + f"goal: {[float(e) for e in [x, y, z]]}")
             print("  "*tab + "size: 0.2")
             tab -= 1

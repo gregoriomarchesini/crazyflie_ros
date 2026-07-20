@@ -1,4 +1,5 @@
 import sys
+import time
 import rclpy
 import signal
 import numpy as np
@@ -17,7 +18,7 @@ from std_msgs.msg import Int32, Bool
 from rcl_interfaces.msg import Parameter
 from geometry_msgs.msg import Point, PoseStamped, Twist
 from rvo_interface.msg import Goal, Goallist  # type: ignore
-from crazyflie_interfaces.msg import Position, FullState, VelocityWorld
+from crazyflie_interfaces.msg import Position, FullState, VelocityWorld, Hover
 
 from std_srvs.srv import Empty
 from rcl_interfaces.srv import SetParameters
@@ -75,16 +76,17 @@ class agent_RVO(Node) :
         cmd_type = {True: Twist     , False: Position}
 
         self.cmd_vel = False
-        self.cmd_all = False
-        self.time_between_command = 0.5
+        self.cmd_all = True
+        self.time_between_command = 0.25
         if self.cmd_vel :
-            cmd_name = {True: "/cmd_vel", False: "/cmd_velocity_world"}
-            cmd_type = {True: Twist     , False: VelocityWorld}
+            cmd_name = {True: "/cmd_vel", False: "/cmd_hover"}
+            cmd_type = {True: Twist     , False: Hover}
 
         self.odom_subscribers = []
         self.twist_publishers = []
         self.takeoff_services = []
         self.landing_services = []
+        self.notify = []
         self.start_height = []
         self.command_time = [self.time_between_command*i/self.NUM_AGENTS for i in range(self.NUM_AGENTS)]
         if self.cmd_all and not self.simu:
@@ -118,6 +120,10 @@ class agent_RVO(Node) :
                     self.twist_publishers.append(
                         self.create_publisher(cmd_type[self.simu], drone + cmd_name[self.simu], 10)
                     )
+                    client = self.create_client(NotifySetpointsStop, drone + "/notify_setpoints_stop")
+                    while not client.wait_for_service(timeout_sec = 1) :
+                        self.get_logger().warn('notify_setpoints_stop service not available, waiting again... Make sure the crazyswarm is launched')
+                    self.notify.append(client)
 
                 else :
                     goto_service = self.create_client(GoTo, drone + "/go_to")
@@ -247,6 +253,13 @@ class agent_RVO(Node) :
             self.pos[idx, 1] = position.y
             self.pos[idx, 2] = position.z
 
+            # MoCap does not give orientation so useless
+            # q = p.pose.orientation
+            # euler = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w]) # type: ignore
+            # self.angles[idx, 0] = euler[0]
+            # self.angles[idx, 1] = euler[1]
+            # self.angles[idx, 2] = euler[2]
+
             dir = self.goals[idx]-self.pos[idx] if self.goals[idx] is not None else np.array((0, 0, 0))
             dir_norm = np.linalg.norm(dir)
             self.v_opt[idx] = dir if dir_norm <= self.SPEED else self.SPEED/dir_norm*dir # type: ignore
@@ -338,13 +351,17 @@ class agent_RVO(Node) :
                 publisher.publish(msg)
 
         else :
-            if self.cmd_vel :
-                for idx, publisher in enumerate(self.twist_publishers):
-                    msg = VelocityWorld()
-                    msg.linear.z = float(np.clip(-self.hoover_heights[idx]/self.landing_time, -self.Z_SPEED, self.Z_SPEED)) if self.DIM == 2 else float(np.clip(-self.pos[idx, 2], -self.Z_SPEED, self.Z_SPEED)) # type: ignore
-                    publisher.publish(msg)
-            else :
-                if not self.called_landing :
+            if not self.called_landing :
+                if self.cmd_vel :
+                    for idx, publisher in enumerate(self.twist_publishers):
+                        if self.pos[idx, 2] > 0.2 :
+                            msg = Hover()
+                            msg.vx = float(0.)
+                            msg.vy = float(0.)
+                            msg.yaw_rate = float(0.)
+                            msg.z_distance = float(self.pos[idx, 2] + np.clip(-self.hoover_heights[idx]/self.landing_time, -self.Z_SPEED, self.Z_SPEED))
+                            publisher.publish(msg)
+                else :
                     self.called_landing = True
                     if self.cmd_all :
                         # self.get_logger().info(f"{AnsiColor.VIOLET} landing called at height {self.start_height} {AnsiColor.RESET}")
@@ -363,7 +380,7 @@ class agent_RVO(Node) :
 
         landing_finished = True
         for pos in self.pos :
-            if pos[2] > 0.15 :
+            if pos[2] > 0.2 :
                 landing_finished = False
                 break
 
@@ -413,7 +430,7 @@ class agent_RVO(Node) :
                             req.goal = goal
                             req.yaw = 0.
                             duration = 2*np.linalg.norm(x_new-self.pos[idx])/vel_norm if vel_norm != 0 else 0
-                            duration = max(duration, 1)
+                            duration = max(duration, 2)
                             req.duration.sec = int(duration)
                             req.duration.nanosec = int((duration%1)*1e9)
                             self.twist_publishers[idx].call_async(req)
@@ -423,11 +440,13 @@ class agent_RVO(Node) :
                         dp = new_vel[i]
                         x_new = self.pos[idx] + dp
                     if self.cmd_vel :
-                        msg = VelocityWorld()
-                        msg.vel.x = float(new_vel[idx][0])
-                        msg.vel.y = float(new_vel[idx][1])
-                        msg.vel.z = float(np.clip(self.hoover_heights[idx] - self.pos[idx, 2],-self.Z_SPEED,self.Z_SPEED)) if self.DIM == 2 else float(new_vel[idx][2])
-                        msg.yaw_rate = float(np.clip(0. - self.angles[idx, 2],-self.SPEED,self.SPEED)) # pyright: ignore[reportOptionalOperand]
+                        if self.dist_goal[idx] < max(agents.time_between_command, agents.AGENT_TIMER) * vel_norm :
+                            new_vel[i] = new_vel[i] * self.dist_goal[idx] / max(agents.time_between_command, agents.AGENT_TIMER) / vel_norm
+                        msg = Hover()
+                        msg.vx = float(new_vel[i][0])
+                        msg.vy = float(new_vel[i][1])
+                        msg.yaw_rate = float(0.)
+                        msg.z_distance = self.hoover_heights[idx] if self.DIM == 2 else self.pos[idx, 2] + new_vel[i, 2]*self.time_between_command
                         publisher.publish(msg)
                     elif not self.stabilized[idx] :
                         req = GoTo.Request()
@@ -437,8 +456,7 @@ class agent_RVO(Node) :
                         goal.z = float(self.hoover_heights[idx]) if self.DIM == 2 else float(x_new[2]) # type: ignore
                         req.goal = goal
                         req.yaw = 0.
-                        duration = 2 if vel_norm != 0 else 0
-                        duration = max(duration, 1)
+                        duration = 2
                         req.duration.sec = int(duration)
                         req.duration.nanosec = int((duration%1)*1e9)
                         # self.get_logger().info(f"{AnsiColor.VIOLET} duration : {duration} {AnsiColor.RESET}")
@@ -507,7 +525,7 @@ def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
     elif lambda_ > TAU * v_norm :
         lambda_ = TAU*v_norm
     if (np.linalg.norm(dp-lambda_*v) <= 2*RADIUS) :
-        if lambda_ <= agents.time_between_command * v_norm :
+        if lambda_ <= 1.25 * max(agents.time_between_command, agents.AGENT_TIMER) * v_norm : # Look a bit more in the future for safety
             if dp@v > 0 :
                 return np.inf
             return 0
@@ -518,13 +536,22 @@ def RVO_loc(idx, test_velocities, v_opt, pos, vel, stabilized, floor) :
     DIST_DETECT = 3
     v_tests = [v for v in test_velocities] + [v_opt[idx]]
     v_tests.sort(key = lambda x : np.linalg.norm(v_opt[idx] - x))
-    costs = [0 for _ in v_tests]
-    for other_idx, pos_other in enumerate(pos) :
-        if (other_idx != idx and np.linalg.norm(pos[idx] - pos_other) <= DIST_DETECT) :
-            for i, v in enumerate(v_tests) :
+    min_cost = np.inf
+    best_v = v_tests[0]
+    for i, v in enumerate(v_tests) :
+        cost = 0
+        for other_idx, pos_other in enumerate(pos) :
+            if (other_idx != idx and np.linalg.norm(pos[idx] - pos_other) <= DIST_DETECT) :
                 res = np.inf if pos[idx, 2]-floor < -v[2]*agents.time_between_command else is_in_vo(idx, other_idx, 2*v-vel[idx]-vel[other_idx], pos, stabilized)
-                costs[i] += res # type: ignore
-    return v_tests[np.argmin(costs)]
+                cost += res
+                if cost == np.inf :
+                    break
+        if cost == 0 :
+            return v
+        if cost < min_cost :
+            min_cost = cost
+            best_v = v
+    return best_v
 
 def signal_handler(sig, frame):
     print("Shutdown signal received, cleaning up...")

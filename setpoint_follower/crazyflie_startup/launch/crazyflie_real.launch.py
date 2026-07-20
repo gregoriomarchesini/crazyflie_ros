@@ -112,7 +112,7 @@ def generate_crazyswarm_config( agents : dict[int,dict], dir_path: str) -> str:
             "firmware_params": {
                 "commander": {"enHighLevel": 1},
                 "stabilizer": {"estimator": 2, # kalman filter 
-                              "controller": 2},# PID , 2 # mellinger (for collision avoidance this is the recommended one)
+                              "controller": 1},# PID , 2 # mellinger (for collision avoidance this is the recommended one)
                 "locSrv": {"extPosStdDev": 1e-3, "extQuatStdDev": 0.5e-1},
                 "colAv": {"enable": 0,
                           "ellipsoidX": 0.15,
