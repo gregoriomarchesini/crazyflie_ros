@@ -30,7 +30,7 @@ endif
 
 COLCON_STAMP := .colcon.stamp
 
-SRC = $(shell find src/ -name '*.py' ! -name "gen_mission.py" -o -name '*.cpp')
+SRC = $(shell find src/ -name '*.py' ! -name "gen_mission.py" ! -name "gen_pretty.py" -o -name '*.cpp')
 
 # Runs every only if a cpp or a python file is changed
 $(COLCON_STAMP) : $(SRC)
@@ -63,7 +63,16 @@ real : compile
 	done
 
 generate :
+	@ ./src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/gen_pretty.py
 	@ ./src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/gen_mission.py $(var) $(args)
+
+clean :
+	@ rm -f src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/pretty.yaml
+	@ rm -f src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/random.yaml
+	@ rm -f src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/rsphere.yaml
+	@ rm -f src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/sphere.yaml
+	@ rm -f src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/circle.yaml
+	@ rm -f src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/test_real.yaml
 
 %::
 	@true
@@ -72,5 +81,6 @@ EOF
 echo "Makefile generated"
 
 chmod u+x $MAKEFILE_DIR/src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/gen_mission.py
+chmod u+x $MAKEFILE_DIR/src/crazyflie_ros/setpoint_follower/crazyflie_startup/config/missions/gen_pretty.py
 
-echo "Made gen_mission.py executable"
+echo "Made generators executable"

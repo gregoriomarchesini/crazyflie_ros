@@ -17,8 +17,8 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Int32, Bool
 from rcl_interfaces.msg import Parameter
 from geometry_msgs.msg import Point, PoseStamped, Twist
-from rvo_interface.msg import Goal, Goallist  # type: ignore
 from crazyflie_interfaces.msg import Position, FullState, VelocityWorld, Hover
+from rvo_interface.msg import Goal, Goallist # pyright: ignore[reportAttributeAccessIssue]
 
 from std_srvs.srv import Empty
 from rcl_interfaces.srv import SetParameters
@@ -35,7 +35,7 @@ class agent_RVO(Node) :
         self.declare_parameter("SPEED", 0.4)            # max speed
         self.declare_parameter("AGENT_TIMER", 0.1)      # frequency
         self.declare_parameter("HOOVERING_HEIGHT",1.0)  # alitude at which the drones move nominally
-        self.declare_parameter("COMM_DISTANCE", 1.0)    # distance at which we take other into account
+        self.declare_parameter("COMM_DISTANCE", 1.0)    # useless
 
         backend  = self.get_parameter("backend").value
         self.simu = None
@@ -359,7 +359,7 @@ class agent_RVO(Node) :
                             msg.vx = float(0.)
                             msg.vy = float(0.)
                             msg.yaw_rate = float(0.)
-                            msg.z_distance = float(self.pos[idx, 2] + np.clip(-self.hoover_heights[idx]/self.landing_time, -self.Z_SPEED, self.Z_SPEED))
+                            msg.z_distance = float(self.pos[idx, 2] + np.clip(-self.hoover_heights[idx]/self.landing_time, -self.Z_SPEED, self.Z_SPEED)) # pyright: ignore[reportOptionalOperand]
                             publisher.publish(msg)
                 else :
                     self.called_landing = True
@@ -440,13 +440,13 @@ class agent_RVO(Node) :
                         dp = new_vel[i]
                         x_new = self.pos[idx] + dp
                     if self.cmd_vel :
-                        if self.dist_goal[idx] < max(agents.time_between_command, agents.AGENT_TIMER) * vel_norm :
-                            new_vel[i] = new_vel[i] * self.dist_goal[idx] / max(agents.time_between_command, agents.AGENT_TIMER) / vel_norm
+                        if self.dist_goal[idx] < max(agents.time_between_command, agents.AGENT_TIMER) * vel_norm : # pyright: ignore[reportArgumentType]
+                            new_vel[i] = new_vel[i] * self.dist_goal[idx] / max(agents.time_between_command, agents.AGENT_TIMER) / vel_norm # pyright: ignore[reportArgumentType]
                         msg = Hover()
                         msg.vx = float(new_vel[i][0])
                         msg.vy = float(new_vel[i][1])
                         msg.yaw_rate = float(0.)
-                        msg.z_distance = self.hoover_heights[idx] if self.DIM == 2 else self.pos[idx, 2] + new_vel[i, 2]*self.time_between_command
+                        msg.z_distance = self.hoover_heights[idx] if self.DIM == 2 else self.pos[idx, 2] + new_vel[i][2]*self.time_between_command
                         publisher.publish(msg)
                     elif not self.stabilized[idx] :
                         req = GoTo.Request()
@@ -513,6 +513,7 @@ def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
     if stabilized[idx] and stabilized[other_idx] :
         return 0
     TAU = 3
+    MARGIN = 0
     RADIUS = (.15 if not stabilized[other_idx] else .1) if agents.DIM == 2 else (.2 if not stabilized[other_idx] else .1)
     v_norm = np.linalg.norm(v_test)
     if v_norm == 0 :
@@ -521,11 +522,11 @@ def is_in_vo(idx, other_idx, v_test, pos, stabilized) :
     dp = pos[other_idx] - pos[idx]
     lambda_ = dp @ v
     if lambda_ < 0 :
-        lambda_ = 0
+        return 0
     elif lambda_ > TAU * v_norm :
         lambda_ = TAU*v_norm
-    if (np.linalg.norm(dp-lambda_*v) <= 2*RADIUS) :
-        if lambda_ <= 1.25 * max(agents.time_between_command, agents.AGENT_TIMER) * v_norm : # Look a bit more in the future for safety
+    if (np.linalg.norm(dp-lambda_*v) <= 2*RADIUS + MARGIN) :
+        if lambda_ <= (1.25 * max(agents.time_between_command, agents.AGENT_TIMER) if agents.cmd_vel else 1) * v_norm + 2*RADIUS: # pyright: ignore[reportArgumentType]
             if dp@v > 0 :
                 return np.inf
             return 0
